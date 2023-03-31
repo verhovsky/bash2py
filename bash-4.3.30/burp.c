@@ -45,7 +45,7 @@ increase_burp(burpT *burpP)
 			assert(0);
 			exit(1);
 		}
-		burpP->m_max = max;
+		burpP->m_max = max - 8;
 		return;
 	}
 	max = burpP->m_max << 1;
@@ -61,7 +61,7 @@ increase_burp(burpT *burpP)
 		assert(0);
 		exit(1);
 	}
-	burpP->m_max = max;
+	burpP->m_max = max - 8;
 }
 
 char *
@@ -72,7 +72,7 @@ burp_extend(burpT *burpP, int offset, int need)
 	
 	lth = burpP->m_lth;
 	assert(0 <= offset && offset <= lth);
-	while ((burpP->m_max - lth) < need+2) {
+	while ((burpP->m_max - lth) < need) {
 		increase_burp(burpP);
 	}
 	P = burpP->m_P + offset;
