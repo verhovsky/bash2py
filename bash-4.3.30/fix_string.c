@@ -1612,7 +1612,7 @@ unmarkExpand(void)
     g_buffer.m_lth = P1 - g_buffer.m_P;
 }
 
-static char *
+static void
 unescapeDollar(void)
 {
 	char *P, *P1;
