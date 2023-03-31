@@ -691,6 +691,9 @@ has_equal_sign(SIMPLE_COM *simple_command)
 static void
 print_popen_flags(REDIRECT *redirects)
 {
+	fix_typeE	got;
+	char		*wordP;
+
 	for (; redirects; redirects = redirects->next) {
 		switch( redirects->instruction) {
 		case r_reading_until:
@@ -700,9 +703,11 @@ print_popen_flags(REDIRECT *redirects)
 			burps(&g_output, ",stdin=subprocess.PIPE");
 			break;
 		case r_input_direction:
-			burps(&g_output, ",stdin=file('");
-			burps(&g_output, redirects->redirectee.filename->word);
-			burps(&g_output, "','rb')");
+			burps(&g_output, ",stdin=file(");
+        	wordP = redirects->redirectee.filename->word;
+            wordP = fix_string(wordP, FIX_STRING, &got);
+			burps(&g_output, wordP);
+			burps(&g_output, ",'rb')");
 			break;
 		case r_duplicating_output:
 			burps(&g_output, ",stderr=");
@@ -727,9 +732,11 @@ print_popen_flags(REDIRECT *redirects)
 			default:
 				burp(&g_output, ",std%d", redirects->redirector.dest);
 			}
-			burps(&g_output, "=file('");
-			burps(&g_output, redirects->redirectee.filename->word);
-			burps(&g_output, "','wb')");
+			burps(&g_output, "=file(");
+        	wordP = redirects->redirectee.filename->word;
+            wordP = fix_string(wordP, FIX_STRING, &got);
+			burps(&g_output, wordP);
+			burps(&g_output, ",'wb')");
 			break;
 		case r_append_err_and_out:
 			burps(&g_output, ",stderr=subprocess.STDOUT");
@@ -744,9 +751,11 @@ print_popen_flags(REDIRECT *redirects)
 			default:
 				burp(&g_output, ",std%d", redirects->redirector.dest);
 			}
-			burps(&g_output, "=file('");
-			burps(&g_output, redirects->redirectee.filename->word);
-			burps(&g_output, "','ab')");
+			burps(&g_output, "=file(");
+        	wordP = redirects->redirectee.filename->word;
+            wordP = fix_string(wordP, FIX_STRING, &got);
+			burps(&g_output, wordP);
+			burps(&g_output, ",'ab')");
 			break;
 		}
 	}
