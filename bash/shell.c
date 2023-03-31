@@ -359,6 +359,7 @@ main (argc, argv, env)
 
   register int i;
   int code, old_errexit_flag;
+  const char *shell_scriptP = 0;
 #if defined (RESTRICTED_SHELL)
   int saverst;
 #endif
@@ -702,7 +703,8 @@ main (argc, argv, env)
      default_input as appropriate. */
   if (arg_index != argc && read_from_stdin == 0)
     {
-      open_shell_script (argv[arg_index]);
+	  shell_scriptP = argv[arg_index];
+      open_shell_script (shell_scriptP);
       arg_index++;
     }
   else if (interactive == 0)
@@ -752,7 +754,7 @@ main (argc, argv, env)
 
   /* Read commands until exit condition. */
 #ifdef MIW
-  initialize_translator();
+  initialize_translator(shell_scriptP);
 #endif MIW
   
   reader_loop ();

@@ -129,6 +129,10 @@ extern int bash_input_fd_changed;
 #endif
 
 extern int errno;
+extern int token_cnt;
+
+extern void seen_comment_char(int c);
+
 /* **************************************************************** */
 /*								    */
 /*		    "Forward" declarations			    */
@@ -2446,8 +2450,12 @@ discard_until (character)
 {
   int c;
 
-  while ((c = shell_getc (0)) != EOF && c != character)
-    ;
+  seen_comment_char(-1);
+  while ((c = shell_getc (0)) != EOF) {
+	seen_comment_char(c);
+	if (c == character) {
+		break;
+  }	}
 
   if (c != EOF)
     shell_ungetc (c);
@@ -2869,6 +2877,7 @@ read_token (command)
       return ('\n');
     }
 
+  ++token_cnt;  
   if (token_to_read)
     {
       result = token_to_read;

@@ -513,6 +513,7 @@ make_bare_simple_command ()
   temp->redirects = (REDIRECT *)NULL;
 
   command->type = cm_simple;
+  command->line = line_number;
   command->redirects = (REDIRECT *)NULL;
   command->flags = 0;
 

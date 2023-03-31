@@ -5,7 +5,9 @@ AVERAGE="0"
 SUM="0"
 NUM="0"
 
-foo = `cat /tmp/baz`
+foo="`date` `pwd`"
+
+echo $foo
 
 while true; do
 

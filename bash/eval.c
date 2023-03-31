@@ -58,6 +58,7 @@ extern int last_command_exit_value, stdin_redir;
 extern int need_here_doc;
 extern int current_command_number, current_command_line_count, line_number;
 extern int expand_aliases;
+extern int token_cnt;
 
 static void send_pwd_to_eterm __P((void));
 static sighandler alrm_catcher __P((int));
@@ -241,6 +242,7 @@ parse_command ()
     }
 
   current_command_line_count = 0;
+  token_cnt = 0;
   r = yyparse ();
 
   if (need_here_doc)
