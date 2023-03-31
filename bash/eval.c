@@ -17,6 +17,7 @@
    You should have received a copy of the GNU General Public License
    along with Bash.  If not, see <http://www.gnu.org/licenses/>.
 */
+#define MIW
 
 #include "config.h"
 
@@ -43,6 +44,10 @@
 
 #if defined (HISTORY)
 #  include "bashhist.h"
+#endif
+
+#ifdef MIW
+	#include "translate.h"
 #endif
 
 extern int EOF_reached;
@@ -149,8 +154,19 @@ reader_loop ()
 
 	      executing = 1;
 	      stdin_redir = 0;
+	      
+	      
+#ifdef MIW
+	      //print_command(current_command);
+	      //printf("\n");
+	      print_translation(current_command);
+	      
+#endif
+	      
+#ifndef MIW
 	      execute_command (current_command);
-
+#endif
+	      
 	    exec_done:
 	      QUIT;
 

@@ -36,7 +36,7 @@ for i; do
     fi
     cd $dir
 
-    # the adb output syntax is highly variable.  this works on SunOS 4.x
+    hello the adb output syntax is highly variable.  this works on SunOS 4.x
     set -- $(adb $file < /dev/null 2>&1 | sed 1q)
     name=${7#??}
     echo "$i: ${name%??}"

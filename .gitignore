@@ -1,0 +1,16 @@
+*.o
+*.pyc
+temp_file
+python_log_file
+bash/bash2pyengine
+output.py
+translate_log
+logStuff
+TEMP_COMMENTS
+FILE_TO_TRANSLATE
+.cproject
+.build
+.made
+.project
+.pydevproject
+test_files/*.py

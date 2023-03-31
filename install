@@ -1,0 +1,5 @@
+#!/bin/sh
+cd bash
+./configure
+make
+cd ..

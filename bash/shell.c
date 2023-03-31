@@ -23,8 +23,12 @@
   Sunday, January 10th, 1988.
   Initial author: Brian Fox
 */
+
+#define MIW
+
 #define INSTALL_DEBUG_MODE
 
+//#include "translate.h"
 #include "config.h"
 
 #include "bashtypes.h"
@@ -352,6 +356,7 @@ main (argc, argv, env)
      char **argv, **env;
 #endif /* !NO_MAIN_ENV_ARG */
 {
+
   register int i;
   int code, old_errexit_flag;
 #if defined (RESTRICTED_SHELL)
@@ -746,7 +751,15 @@ main (argc, argv, env)
   shell_initialized = 1;
 
   /* Read commands until exit condition. */
+#ifdef MIW
+  initialize_translator();
+#endif MIW
+  
   reader_loop ();
+  
+#ifdef MIW
+  close_translator();
+#endif
   exit_shell (last_command_exit_value);
 }
 

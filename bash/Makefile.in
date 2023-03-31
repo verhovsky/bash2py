@@ -18,6 +18,11 @@
 # Make sure the first target in the makefile is the right one
 all: .made
 
+#compile python functions from command line (assuming python 2.7) -- note must apt-get python-dev
+#gcc -c python_functions.c -I/usr/include/python2.7  -lpython2.7 -o python_functions.o
+
+#PYTHON_FLAGS = -I/usr/include/python2.7  -lpython2.7 
+
 PACKAGE = @PACKAGE_NAME@
 VERSION = @PACKAGE_VERSION@
 
@@ -100,7 +105,7 @@ OBJEXT = @OBJEXT@
 VERSPROG = bashversion$(EXEEXT)
 VERSOBJ = bashversion.$(OBJEXT)
 
-Program = bash$(EXEEXT)
+Program = bash2pyengine$(EXEEXT)
 Version = @BASHVERS@
 PatchLevel = `$(BUILD_DIR)/$(VERSPROG) -p`
 RELSTATUS = @RELSTATUS@
@@ -414,7 +419,7 @@ LIBRARY_LDFLAGS = $(READLINE_LDFLAGS) $(HISTORY_LDFLAGS) $(GLOB_LDFLAGS) \
 #
 
 # The main source code for the Bourne Again SHell.
-CSOURCES = shell.c eval.c parse.y general.c make_cmd.c print_cmd.c y.tab.c \
+CSOURCES = shell.c eval.c parse.y general.c make_cmd.c y.tab.c translate.c python_functions.c \
 	   dispose_cmd.c execute_cmd.c variables.c $(GLOBC) version.c \
 	   expr.c copy_cmd.c flags.c subst.c hashcmd.c hashlib.c mailcheck.c \
 	   test.c trap.c alias.c jobs.c nojobs.c $(ALLOC_FILES) braces.c \
@@ -443,7 +448,7 @@ SIGLIST_O = @SIGLIST_O@
 SIGNAMES_O = @SIGNAMES_O@
 
 # Matching object files.
-OBJECTS	 = shell.o eval.o y.tab.o general.o make_cmd.o print_cmd.o $(GLOBO) \
+OBJECTS	 = shell.o eval.o y.tab.o general.o make_cmd.o translate.o python_functions.o $(GLOBO) \
 	   dispose_cmd.o execute_cmd.o variables.o copy_cmd.o error.o \
 	   expr.o flags.o $(JOBS_O) subst.o hashcmd.o hashlib.o mailcheck.o \
 	   trap.o input.o unwind_prot.o pathexp.o sig.o test.o version.o \
@@ -989,12 +994,12 @@ pathexp.o: make_cmd.h subst.h sig.h pathnames.h externs.h
 pathexp.o: pathexp.h flags.h 
 pathexp.o: $(GLOB_LIBSRC)/glob.h $(GLOB_LIBSRC)/strmatch.h
 pathexp.o: ${BASHINCDIR}/shmbutil.h ${BASHINCDIR}/shmbchar.h
-print_cmd.o: config.h bashansi.h ${BASHINCDIR}/ansi_stdlib.h
-print_cmd.o: shell.h syntax.h config.h bashjmp.h ${BASHINCDIR}/posixjmp.h command.h ${BASHINCDIR}/stdc.h error.h
-print_cmd.o: general.h xmalloc.h bashtypes.h variables.h arrayfunc.h conftypes.h array.h hashlib.h
-print_cmd.o: quit.h ${BASHINCDIR}/maxpath.h unwind_prot.h dispose_cmd.h
-print_cmd.o: make_cmd.h subst.h sig.h pathnames.h externs.h 
-print_cmd.o: ${GRAM_H} $(DEFSRC)/common.h
+translate.o: config.h bashansi.h ${BASHINCDIR}/ansi_stdlib.h
+translate.o: shell.h syntax.h config.h bashjmp.h ${BASHINCDIR}/posixjmp.h command.h ${BASHINCDIR}/stdc.h error.h
+translate.o: general.h xmalloc.h bashtypes.h variables.h arrayfunc.h conftypes.h array.h hashlib.h
+translate.o: quit.h ${BASHINCDIR}/maxpath.h unwind_prot.h dispose_cmd.h
+translate.o: make_cmd.h subst.h sig.h pathnames.h externs.h 
+translate.o: ${GRAM_H} $(DEFSRC)/common.h
 redir.o: config.h bashtypes.h ${BASHINCDIR}/posixstat.h bashansi.h ${BASHINCDIR}/ansi_stdlib.h ${BASHINCDIR}/filecntl.h
 redir.o: ${BASHINCDIR}/memalloc.h shell.h syntax.h bashjmp.h ${BASHINCDIR}/posixjmp.h command.h ${BASHINCDIR}/stdc.h error.h
 redir.o: general.h xmalloc.h variables.h arrayfunc.h conftypes.h array.h hashlib.h quit.h ${BASHINCDIR}/maxpath.h unwind_prot.h
@@ -1190,7 +1195,7 @@ nojobs.o: bashintl.h ${LIBINTL_H} $(BASHINCDIR)/gettext.h
 y.tab.o: bashintl.h ${LIBINTL_H} $(BASHINCDIR)/gettext.h
 pcomplete.o: bashintl.h ${LIBINTL_H} $(BASHINCDIR)/gettext.h
 pcomplib.o: bashintl.h ${LIBINTL_H} $(BASHINCDIR)/gettext.h
-print_cmd.o: bashintl.h ${LIBINTL_H} $(BASHINCDIR)/gettext.h
+translate.o: bashintl.h ${LIBINTL_H} $(BASHINCDIR)/gettext.h
 redir.o: bashintl.h ${LIBINTL_H} $(BASHINCDIR)/gettext.h
 shell.o: bashintl.h ${LIBINTL_H} $(BASHINCDIR)/gettext.h
 sig.o: bashintl.h ${LIBINTL_H} $(BASHINCDIR)/gettext.h

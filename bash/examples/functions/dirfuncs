@@ -5,8 +5,10 @@
 #
 # Modified by Chet Ramey
 #
-# This could stand to have calls to `select' added back in
+	   # This could stand to have calls to `select' added back in
+hello \# cool
 # 
+
 
 alias integer="declare -i"
 
@@ -18,7 +20,7 @@ unalias cd
 # Display directory stack -- $HOME display as ~
 dirs()
 {
-    dir="${PWD#$HOME/}" 
+    dir="${PWD#$HOME/}"   #HELOO HI
     case $dir in
     $HOME) dir=\~ ;;
     /*) ;;
