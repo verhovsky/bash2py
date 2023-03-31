@@ -967,20 +967,20 @@ build_arg_list (cmd, text, lwords, ind)
   int i;
 
   ret = (WORD_LIST *)NULL;
-  w = make_word (cmd);
+  w = make_word (cmd, 0);
   ret = make_word_list (w, (WORD_LIST *)NULL);
 
-  w = (lwords && lwords->word) ? copy_word (lwords->word) : make_word ("");
+  w = (lwords && lwords->word) ? copy_word (lwords->word) : make_word ("", 0);
   cl = ret->next = make_word_list (w, (WORD_LIST *)NULL);
 
-  w = make_word (text);
+  w = make_word (text, 0);
   cl->next = make_word_list (w, (WORD_LIST *)NULL);
   cl = cl->next;
 
   /* Search lwords for current word */
   for (l = lwords, i = 1; l && i < ind-1; l = l->next, i++)
     ;
-  w = (l && l->word) ? copy_word (l->word) : make_word ("");
+  w = (l && l->word) ? copy_word (l->word) : make_word ("", 0);
   cl->next = make_word_list (w, (WORD_LIST *)NULL);
 
   return ret;

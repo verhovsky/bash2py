@@ -54,6 +54,9 @@ extern int printf __P((const char *, ...));	/* Yuck.  Double yuck. */
 
 extern int indirection_level;
 
+static int indentation;
+static int indentation_amount = 4;
+
 #if defined (PREFER_STDARG)
 typedef void PFUNC __P((const char *, ...));
 
@@ -115,6 +118,7 @@ FILE *xtrace_fp = 0;
 
 /* Non-zero means the stuff being printed is inside of a function def. */
 static int inside_function_def;
+static int skip_this_indent = 0;
 static int was_heredoc;
 static int printing_connection;
 static REDIRECT *deferred_heredocs;
@@ -264,12 +268,7 @@ void seen_comment_char(int c)
 		return;
 	}
 	if (c) {
-		int save_disable_indent;
-
-		save_disable_indent   = g_burp_disable_indent;
-		g_burp_disable_indent = 1;
 		burpc(&g_comment, c);
-		g_burp_disable_indent = save_disable_indent;
 	}
 }
 
@@ -284,6 +283,7 @@ print_comments(int before_byte)
 	commentT	*commentP;
 
 	while ((commentP = g_comment_headP) && g_comment_headP->m_byte < before_byte) {
+		indent (indentation);
 		burps(&g_output, g_comment_headP->m_textP);
 		burpc(&g_output, '\n');
 		g_comment_headP = g_comment_headP->m_nextP;
@@ -353,11 +353,13 @@ COMMAND *command;
 	char s[3];
 
 	if (command) {
-	    if (command->position.byte < 0) {
-			fprintf(stderr, "Command type %d lacks position\n", command->type);
-		} else {
-			print_comments(command->position.byte);
-		}
+		assert(0 <= command->position.byte);
+		print_comments(command->position.byte);
+
+		if (skip_this_indent)
+			skip_this_indent--;
+		else
+			indent (indentation);
 
 		if (command->flags & CMD_TIME_PIPELINE) {
 			UNCHANGED;
@@ -424,6 +426,7 @@ COMMAND *command;
 
 		case cm_connection:
 
+			skip_this_indent++;
 			printing_connection++;
 			make_command_string_internal (command->value.Connection->first);
 
@@ -443,6 +446,7 @@ COMMAND *command;
 
 				if (c != '&' || command->value.Connection->second) {
 					burpc(&g_output, ' ');
+					skip_this_indent++;
 				}
 			}
 			break;
@@ -450,17 +454,21 @@ COMMAND *command;
 			case AND_AND:
 				print_deferred_heredocs (" && ");
 				if (command->value.Connection->second)
+					skip_this_indent++;
 				break;
 
 			case OR_OR:
 				print_deferred_heredocs (" || ");
 				if (command->value.Connection->second)
+					skip_this_indent++;
 				break;
 
 			case ';':
 				if (deferred_heredocs == 0) {
 					if (was_heredoc == 0) {
 						burpc(&g_output, '\n');
+						indent (indentation);
+						skip_this_indent++;
 					} else {
 						was_heredoc = 0;
 					}
@@ -468,6 +476,11 @@ COMMAND *command;
 					print_deferred_heredocs (inside_function_def ? "" : ";");
 				}
 
+				if (!inside_function_def) {
+					if (command->value.Connection->second) {
+						skip_this_indent++;
+					}
+				}
 				break;
 
 			default:
@@ -493,6 +506,7 @@ COMMAND *command;
 			case cm_subshell:
 				UNCHANGED;
 				burps(&g_output, "( ");
+				skip_this_indent++;
 				make_command_string_internal (command->value.Subshell->command);
 				burps(&g_output, " )");
 				break;
@@ -502,6 +516,7 @@ COMMAND *command;
 				burps(&g_output, "coproc ");
 				burps(&g_output, command->value.Coproc->name);
 				burpc(&g_output, ' ');
+				skip_this_indent++;
 				make_command_string_internal (command->value.Coproc->command);
 				break;
 
@@ -597,26 +612,23 @@ WORD_LIST *list;
 char *separator;
 {
 	WORD_LIST *w = list;
-	char* format_string = translate_word(w->word->word);
+	char* format_string = w->word->word;
 	burps(&g_output, "print( ");
 	burps(&g_output, format_string);
+	burps(&g_output, " % (");
 	w = w->next;
-    if (w) {
-		burps(&g_output, " % (");
-		char* word_to_print;
+	char* word_to_print;
 
 
-		for (; w; w = w->next){
-			word_to_print = w->word->word;
-			word_to_print = translate_word(word_to_print);
-			burps(&g_output, word_to_print);
-			if (w->next) {
-				burps(&g_output, ", ");
-			}
+	for (; w; w = w->next){
+		word_to_print = w->word->word;
+		word_to_print = translate_word(word_to_print);
+		burps(&g_output, word_to_print);
+		if (w->next) {
+			burps(&g_output, ", ");
 		}
-		burpc(&g_output, ')');
 	}
-	burps(&g_output, " )\n");
+	burps(&g_output, ") )\n");
 }
 
 /* export [-fn] [-p] var[=value] */
@@ -811,10 +823,10 @@ FOR_COM *for_command;
 	print_for_command_head (for_command);
 	newline ("");
 
-	g_burp_indent++;
+	indentation += indentation_amount;
 	make_command_string_internal (for_command->action);
 	PRINT_DEFERRED_HEREDOCS ("");
-	g_burp_indent--;
+	indentation -= indentation_amount;
 }
 
 #if defined (ARITH_FOR_COMMAND)
@@ -830,9 +842,9 @@ ARITH_FOR_COM *arith_for_command;
 	print_word_list (arith_for_command->step, " ");
 	burps(&g_output, "))");
 	newline ("do\n");
-	g_burp_indent++;
+	indentation += indentation_amount;
 	make_command_string_internal (arith_for_command->action);
-	g_burp_indent--;
+	indentation -= indentation_amount;
 	newline ("done");
 }
 #endif /* ARITH_FOR_COMMAND */
@@ -866,10 +878,10 @@ SELECT_COM *select_command;
 
 	burpc(&g_output, ';');
 	newline ("do\n");
-	g_burp_indent++;
+	indentation += indentation_amount;
 	make_command_string_internal (select_command->action);
 	PRINT_DEFERRED_HEREDOCS ("");
-	g_burp_indent--;
+	indentation -= indentation_amount;
 	newline ("done");
 }
 #endif /* SELECT_COMMAND */
@@ -881,19 +893,22 @@ GROUP_COM *group_command;
 	group_command_nesting++;
 	burps(&g_output, "{ ");
 
-	if (inside_function_def != 0) {
+	if (inside_function_def == 0) {
+		skip_this_indent++;
+	} else {
 		/* This is a group command { ... } inside of a function
 	 definition, and should be printed as a multiline group
 	 command, using the current indentation. */
 		burpc(&g_output, '\n');
-		g_burp_indent++;
+		indentation += indentation_amount;
 	}
 
 	make_command_string_internal (group_command->command);
 
 	if (inside_function_def) {
 		burpc(&g_output, '\n');
-		g_burp_indent--;
+		indentation -= indentation_amount;
+		indent (indentation);
 	} else {
 		burpc(&g_output, ' ');
 	}
@@ -973,14 +988,14 @@ PATTERN_LIST *clauses;
 		}
 		burpc(&g_output, '\n');
 
-		g_burp_indent++;
+		indentation += indentation_amount;
 		make_command_string_internal (clauses->action);
-		g_burp_indent--;
+		indentation -= indentation_amount;
 		PRINT_DEFERRED_HEREDOCS ("");
 
 		clauses = clauses->next;
 	}
-	g_burp_indent--;
+	indentation -= indentation_amount;
 }
 
 static void
@@ -1004,14 +1019,15 @@ char *which;
 {
 	burps(&g_output, which);
 	burpc(&g_output, ' ');
+	skip_this_indent++;
 	burpc(&g_output, '(');
 	make_command_string_internal (while_command->test);
 	burps(&g_output, "):\n");
 	PRINT_DEFERRED_HEREDOCS ("");
-	g_burp_indent++;
+	indentation += indentation_amount;
 	make_command_string_internal (while_command->action);
 	PRINT_DEFERRED_HEREDOCS ("");
-	g_burp_indent--;
+	indentation -= indentation_amount;
 }
 
 static void
@@ -1019,27 +1035,21 @@ print_if_command (if_command)
 IF_COM *if_command;
 {
 	burps(&g_output, "if (");
-restart:
+	skip_this_indent++;
 	make_command_string_internal (if_command->test);
 	burps(&g_output, " ):\n");
-	g_burp_indent++;
+	indentation += indentation_amount;
 	make_command_string_internal (if_command->true_case);
 	PRINT_DEFERRED_HEREDOCS ("");
-	g_burp_indent--;
+	indentation -= indentation_amount;
 
 	if (if_command->false_case)
 	{
-		if (if_command->false_case->flags & CMD_ELIF) {
-			newline("elif (");
-			if_command = if_command->false_case->value.If;
-			goto restart;
-		}
 		newline ("else:\n");
-		g_burp_indent++;
-
+		indentation += indentation_amount;
 		make_command_string_internal (if_command->false_case);
 		PRINT_DEFERRED_HEREDOCS ("");
-		g_burp_indent--;
+		indentation -= indentation_amount;
 	}
 }
 
@@ -1193,7 +1203,7 @@ print_simple_command_helper(SIMPLE_COM *simple_command)
 			burps(&g_output, simple_command->words->word->word);
 			burpc(&g_output, '(');
 		} else {
-			burps(&g_output, "_rc = os.system(");
+			burps(&g_output, "os.system(");
 			print_word_list (simple_command->words, " + \" \" + ");
 		}
 	} else {
@@ -1251,27 +1261,11 @@ print_simple_command_helper(SIMPLE_COM *simple_command)
 				burps(&g_output, "S_ISCHR(os.stat(");
 				print_word_list(word_list->next, " ");
 				burps(&g_output, ").st_mode)");
-			} else if (!strcmp(wordP, "-x")) {
-				/* http://bytes.com/topic/python/answers/577007-need-simple-way-determine-if-file-executable */
-				g_uses_os = 1;
-#ifdef WIN32
-				/* Not perfect */
-				burps(&g_output, "S_IXUSR(os.stat(");
-				print_word_list(word_list->next, " ");
-				burps(&g_output, ").st_mode)");
-#else
-				burps(&g_output, "os.access(");
-				print_word_list(word_list->next, " ");
-				burps(&g_output, ", os.X_OK)");
-#endif
 			} else if (!strcmp(wordP, "-z")){
 				burpc(&g_output, '\'');
 				burps(&g_output, word_list->next->word->word);
 				burpc(&g_output, '\'');
                 burps(&g_output, " not in globals()");
-            } else if (!strcmp(wordP, "-n")) {
-				print_word_list(word_list->next, " ");
-				burps(&g_output, " != ''");
 			} else if (!strcmp(wordP, "-a")) {
 				burps(&g_output, " and ");
 				print_word_list(word_list->next, " ");
@@ -1716,7 +1710,7 @@ static void
 reset_locals ()
 {
 	inside_function_def = 0;
-	g_burp_indent = 0;
+	indentation = 0;
 	printing_connection = 0;
 	deferred_heredocs = 0;
 }
@@ -1734,7 +1728,6 @@ FUNCTION_DEF *func;
 	function_nameT	 *function_nameP;
 	function_nameT	 *globalP, *nextP;
 	char	 *P;
-	int		 save_disable_indent;
 
 	function_nameP = (function_nameT *) malloc(sizeof(function_nameT) + strlen(nameP) + 1);
 	P = (char *) (function_nameP+1);
@@ -1746,19 +1739,20 @@ FUNCTION_DEF *func;
 	func_redirects = NULL;
 	burps(&g_output, "def ");
 	burps(&g_output, nameP);
-	burps(&g_output, " () :");
+	burps(&g_output, " () :\n");
 
 	temp     = save;
 	save     = g_output;
 	g_output = temp;
 	g_output.m_lth = 0;
-	burpc(&g_output, '\n');
 
 	capture_globals = 1;
 	add_unwind_protect (reset_locals, 0);
 
+	indent (indentation);
+
 	inside_function_def++;
-	g_burp_indent++;
+	indentation += indentation_amount;
 
 	cmdcopy = copy_command (func->command);
 	if (cmdcopy->type == cm_group)
@@ -1773,29 +1767,25 @@ FUNCTION_DEF *func;
 	remove_unwind_protect ();
 
 	if (g_globalsP) {
-		burpc(&save, '\n');
 		for (globalP = g_globalsP; globalP; globalP = nextP) {
-			burps(&save, "global ");
+			burps(&save, "    global ");
 			burps(&save, globalP->m_nameP);
 			burpc(&save, '\n');
 			nextP = globalP->m_nextP;
 			free(globalP);
 	    }
 		g_globalsP = 0;
+		burpc(&save, '\n');
 	}
 
 	burpc(&g_output, '\n');
-	save_disable_indent   = g_burp_disable_indent;
-	/* We have already correctly indented g_output */
-	g_burp_disable_indent = 1;
 	burps(&save, g_output.m_P);
-	g_burp_disable_indent = save_disable_indent;
 	temp     = save;
 	save     = g_output;
 	g_output = temp;
 
 	capture_globals = 0;
-	g_burp_indent--;
+	indentation -= indentation_amount;
 	inside_function_def--;
 
 	if (func_redirects)
@@ -1819,10 +1809,14 @@ newline (string)
 char *string;
 {
 	burpc(&g_output, '\n');
+	indent (indentation);
 	if (string && *string) {
 		burps(&g_output, string);
 	}
 }
+
+static char *indentation_string;
+static int indentation_size;
 
 static void
 indent (int amount)
@@ -1847,7 +1841,8 @@ int flags;
 	COMMAND *cmdcopy;
 	REDIRECT *func_redirects;
 
-	old_indent = g_burp_indent;
+	old_indent = indentation;
+	old_amount = indentation_amount;
 	command_string_index = was_heredoc = 0;
 	deferred_heredocs = 0;
 
@@ -1858,11 +1853,18 @@ int flags;
 
 	burps(&g_output, "() ");
 
-	burpc(&g_output, '\n');
-	g_burp_indent++;
+	if ((flags & FUNC_MULTILINE) == 0)
+	{
+		indentation = 1;
+		indentation_amount = 0;
+	} else {
+		burpc(&g_output, '\n');
+		indentation += indentation_amount;
+	}
+
 	inside_function_def++;
 
-	burps(&g_output, "{ \n");
+	burps(&g_output, (flags & FUNC_MULTILINE) ? "{ \n" : "{ ");
 
 	cmdcopy = copy_command (command);
 	/* Take any redirections specified in the function definition (which should
@@ -1877,7 +1879,8 @@ int flags;
 			? cmdcopy->value.Group->command
 					: cmdcopy);
 
-	g_burp_indent = old_indent;
+	indentation = old_indent;
+	indentation_amount = old_amount;
 	inside_function_def--;
 
 	if (func_redirects)
@@ -1885,17 +1888,33 @@ int flags;
 		newline ("} ");
 		print_redirection_list (func_redirects, NULL);
 		cmdcopy->redirects = func_redirects;
-	} else {
-		newline ("}");
 	}
+	else
+		newline ("}");
 
 	result = the_printed_command;
 
+	if ((flags & FUNC_MULTILINE) == 0)
+	{
+#if 0
+		register int i;
+		for (i = 0; result[i]; i++)
+			if (result[i] == '\n')
+			{
+				strcpy (result + i, result + i + 1);
+				--i;
+			}
+#else
+		if (result[2] == '\n')	/* XXX -- experimental */
+			strcpy (result + 2, result + 3);
+#endif
+	}
+
 	dispose_command (cmdcopy);
 
-	if (flags & FUNC_EXTERNAL) {
+	if (flags & FUNC_EXTERNAL)
 		result = remove_quoted_escapes (result);
-	}
+
 	return (result);
 }
 

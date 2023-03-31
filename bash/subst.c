@@ -2010,7 +2010,7 @@ split_at_delims (string, slen, delims, sentinel, flags, nwp, cwp)
 
       token = substring (string, ts, te);
 
-      ret = add_string_to_list (token, ret);
+      ret = add_string_to_list (token, ret, 0);
       free (token);
       nw++;
 
@@ -2027,7 +2027,7 @@ split_at_delims (string, slen, delims, sentinel, flags, nwp, cwp)
 	 the word we just added, and set the current word to that one. */
       if (cwp && cw == -1 && sentinel < ts)
 	{
-	  tl = make_word_list (make_word (""), ret->next);
+	  tl = make_word_list (make_word ("", 0), ret->next);
 	  ret->next = tl;
 	  cw = nw;
 	  nw++;
@@ -2056,7 +2056,7 @@ split_at_delims (string, slen, delims, sentinel, flags, nwp, cwp)
       if (whitespace (string[sentinel - 1]))
 	{
 	  token = "";
-	  ret = add_string_to_list (token, ret);
+	  ret = add_string_to_list (token, ret, 0);
 	  nw++;
 	}
       cw = nw;
@@ -2457,7 +2457,7 @@ list_string (string, separators, quoted)
 	  /* If we have something, then add it regardless.  However,
 	     perform quoted null character removal on the current word. */
 	  remove_quoted_nulls (current_word);
-	  result = add_string_to_list (current_word, result);
+	  result = add_string_to_list (current_word, result, 0);
 	  result->word->flags &= ~W_HASQUOTEDNULL;	/* just to be sure */
 	  if (quoted & (Q_DOUBLE_QUOTES|Q_HERE_DOCUMENT))
 	    result->word->flags |= W_QUOTED;
@@ -2662,7 +2662,7 @@ list_string_with_quotes (string)
 	  /* We have found the end of a token.  Make a word out of it and
 	     add it to the word list. */
 	  token = substring (s, tokstart, i);
-	  list = add_string_to_list (token, list);
+	  list = add_string_to_list (token, list, 0);
 	  free (token);
 	  while (spctabnl (s[i]))
 	    i++;
@@ -2970,7 +2970,7 @@ pos_params (string, start, end, quoted)
 
   if (start == 0)		/* handle ${@:0[:x]} specially */
     {
-      t = make_word_list (make_word (dollar_vars[0]), params);
+      t = make_word_list (make_word (dollar_vars[0], 0), params);
       save = params = t;
     }
 
@@ -9107,7 +9107,7 @@ brace_expand_word_list (tlist, eflags)
 
 	  for (eindex = 0; temp_string = expansions[eindex]; eindex++)
 	    {
-	      w = make_word (temp_string);
+	      w = make_word (temp_string, 0);
 	      /* If brace expansion didn't change the word, preserve
 		 the flags.  We may want to preserve the flags
 		 unconditionally someday -- XXX */
@@ -9148,13 +9148,13 @@ make_internal_declare (word, option)
   WORD_LIST *wl;
   WORD_DESC *w;
 
-  w = make_word (word);
+  w = make_word (word, 0);
 
   t = assignment (w->word, 0);
   w->word[t] = '\0';
 
   wl = make_word_list (w, (WORD_LIST *)NULL);
-  wl = make_word_list (make_word (option), wl);
+  wl = make_word_list (make_word (option, 0), wl);
 
   return (declare_builtin (wl));  
 }  

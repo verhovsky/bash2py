@@ -143,6 +143,7 @@ extern void seen_comment_char(int c);
 static void debug_parser __P((int));
 #endif
 
+static int yy_getc_peek __P((void));
 static int yy_getc __P((void));
 static int yy_ungetc __P((int));
 
@@ -181,7 +182,7 @@ static char *parse_comsub __P((int, int, int, int *, int));
 static char *parse_compound_assignment __P((int *));
 #endif
 #if defined (DPAREN_ARITHMETIC) || defined (ARITH_FOR_COMMAND)
-static int parse_dparen __P((int));
+static int parse_dparen __P((int, POSITION *positionP));
 static int parse_arith_cmd __P((char **, int));
 #endif
 #if defined (COND_COMMAND)
@@ -207,9 +208,6 @@ static void report_syntax_error __P((char *));
 
 static void handle_eof_input_unit __P((void));
 static void prompt_again __P((void));
-#if 0
-static void reset_readline_prompt __P((void));
-#endif
 static void print_prompt __P((void));
 
 #if defined (HANDLE_MULTIBYTE)
@@ -306,13 +304,6 @@ static int two_tokens_ago;
 
 static int global_extglob;
 
-/* The line number in a script where the word in a `case WORD', `select WORD'
-   or `for WORD' begins.  This is a nested command maximum, since the array
-   index is decremented after a case, select, or for command is parsed. */
-#define MAX_CASE_NEST	128
-static int word_lineno[MAX_CASE_NEST];
-static int word_top = -1;
-
 /* If non-zero, it is the token that we want read_token to return
    regardless of what text is (or isn't) present to be read.  This
    is reset by read_token.  If token_to_read == WORD or
@@ -322,15 +313,23 @@ static WORD_DESC *word_desc_to_read;
 
 static REDIRECTEE source;
 static REDIRECTEE redir;
+
+/* The globally known current input position. */
+POSITION position = {0,0,0};
+
+/* The globally known line number */
+int		 line_number = 0;
+
 %}
 
 %union {
+  POSITION  position;
   WORD_DESC *word;		/* the word that we read. */
-  int number;			/* the number that we read. */
+  PNUMBER   number;			/* the number that we read. */
   WORD_LIST *word_list;
-  COMMAND *command;
-  REDIRECT *redirect;
-  ELEMENT element;
+  COMMAND   *command;
+  REDIRECT  *redirect;
+  ELEMENT   element;
   PATTERN_LIST *pattern;
 }
 
@@ -338,9 +337,24 @@ static REDIRECTEE redir;
    in the case that they are preceded by a list_terminator.  Members
    of the second group are for [[...]] commands.  Members of the
    third group are recognized only under special circumstances. */
-%token IF THEN ELSE ELIF FI CASE ESAC FOR SELECT WHILE UNTIL DO DONE FUNCTION COPROC
+%token <position> IF
+%token THEN ELSE 
+%token <position> ELIF
+%token FI 
+%token <position> CASE
+%token ESAC
+%token <position> FOR
+%token <position> SELECT
+%token <position> WHILE
+%token <position> UNTIL
+%token DO DONE 
+%token <position> FUNCTION 
+%token <position> COPROC
 %token COND_START COND_END COND_ERROR
-%token IN BANG TIME TIMEOPT TIMEIGN
+%token IN
+%token <position> BANG
+%token <position> TIME
+%token TIMEOPT TIMEIGN
 
 /* More general tokens. yylex () knows how to make these. */
 %token <word> WORD ASSIGNMENT_WORD REDIR_WORD
@@ -442,13 +456,13 @@ redirection:	'>' WORD
 			}
 	|	NUMBER '>' WORD
 			{
-			  source.dest = $1;
+			  source.dest = $1.value;
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_output_direction, redir, 0);
 			}
 	|	NUMBER '<' WORD
 			{
-			  source.dest = $1;
+			  source.dest = $1.value;
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_input_direction, redir, 0);
 			}
@@ -472,7 +486,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER GREATER_GREATER WORD
 			{
-			  source.dest = $1;
+			  source.dest = $1.value;
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_appending_to, redir, 0);
 			}
@@ -490,7 +504,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER GREATER_BAR WORD
 			{
-			  source.dest = $1;
+			  source.dest = $1.value;
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_output_force, redir, 0);
 			}
@@ -508,7 +522,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER LESS_GREATER WORD
 			{
-			  source.dest = $1;
+			  source.dest = $1.value;
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_input_output, redir, 0);
 			}
@@ -527,7 +541,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER LESS_LESS WORD
 			{
-			  source.dest = $1;
+			  source.dest = $1.value;
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_reading_until, redir, 0);
 			  redir_stack[need_here_doc++] = $$;
@@ -548,7 +562,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER LESS_LESS_MINUS WORD
 			{
-			  source.dest = $1;
+			  source.dest = $1.value;
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_deblank_reading_until, redir, 0);
 			  redir_stack[need_here_doc++] = $$;
@@ -568,7 +582,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER LESS_LESS_LESS WORD
 			{
-			  source.dest = $1;
+			  source.dest = $1.value;
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_reading_string, redir, 0);
 			}
@@ -581,37 +595,37 @@ redirection:	'>' WORD
 	|	LESS_AND NUMBER
 			{
 			  source.dest = 0;
-			  redir.dest = $2;
+			  redir.dest = $2.value;
 			  $$ = make_redirection (source, r_duplicating_input, redir, 0);
 			}
 	|	NUMBER LESS_AND NUMBER
 			{
-			  source.dest = $1;
-			  redir.dest = $3;
+			  source.dest = $1.value;
+			  redir.dest = $3.value;
 			  $$ = make_redirection (source, r_duplicating_input, redir, 0);
 			}
 	|	REDIR_WORD LESS_AND NUMBER
 			{
 			  source.filename = $1;
-			  redir.dest = $3;
+			  redir.dest = $3.value;
 			  $$ = make_redirection (source, r_duplicating_input, redir, REDIR_VARASSIGN);
 			}
 	|	GREATER_AND NUMBER
 			{
 			  source.dest = 1;
-			  redir.dest = $2;
+			  redir.dest = $2.value;
 			  $$ = make_redirection (source, r_duplicating_output, redir, 0);
 			}
 	|	NUMBER GREATER_AND NUMBER
 			{
-			  source.dest = $1;
-			  redir.dest = $3;
+			  source.dest = $1.value;
+			  redir.dest = $3.value;
 			  $$ = make_redirection (source, r_duplicating_output, redir, 0);
 			}
 	|	REDIR_WORD GREATER_AND NUMBER
 			{
 			  source.filename = $1;
-			  redir.dest = $3;
+			  redir.dest = $3.value;
 			  $$ = make_redirection (source, r_duplicating_output, redir, REDIR_VARASSIGN);
 			}
 	|	LESS_AND WORD
@@ -622,7 +636,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER LESS_AND WORD
 			{
-			  source.dest = $1;
+			  source.dest = $1.value;
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_duplicating_input_word, redir, 0);
 			}
@@ -640,7 +654,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER GREATER_AND WORD
 			{
-			  source.dest = $1;
+			  source.dest = $1.value;
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_duplicating_output_word, redir, 0);
 			}
@@ -658,7 +672,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER GREATER_AND '-'
 			{
-			  source.dest = $1;
+			  source.dest = $1.value;
 			  redir.dest = 0;
 			  $$ = make_redirection (source, r_close_this, redir, 0);
 			}
@@ -676,7 +690,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER LESS_AND '-'
 			{
-			  source.dest = $1;
+			  source.dest = $1.value;
 			  redir.dest = 0;
 			  $$ = make_redirection (source, r_close_this, redir, 0);
 			}
@@ -701,11 +715,11 @@ redirection:	'>' WORD
 	;
 
 simple_command_element: WORD
-			{ $$.word = $1; $$.redirect = 0; }
+			{ $$.word = $1; $$.redirect = 0; $$.position = $1->position; }
 	|	ASSIGNMENT_WORD
-			{ $$.word = $1; $$.redirect = 0; }
+			{ $$.word = $1; $$.redirect = 0; $$.position = $1->position; }
 	|	redirection
-			{ $$.redirect = $1; $$.word = 0; }
+			{ $$.redirect = $1; $$.word = 0; $$.position = $1->position; }
 	;
 
 redirection_list: redirection
@@ -724,9 +738,9 @@ redirection_list: redirection
 	;
 
 simple_command:	simple_command_element
-			{ $$ = make_simple_command ($1, (COMMAND *)NULL); }
+			{ $$ = make_simple_command ($1, (COMMAND *)NULL, &($1.position)); }
 	|	simple_command simple_command_element
-			{ $$ = make_simple_command ($2, $1); }
+			{ $$ = make_simple_command ($2, $1, &($1->position)); }
 	;
 
 command:	simple_command
@@ -760,9 +774,9 @@ shell_command:	for_command
 	|	case_command
 			{ $$ = $1; }
  	|	WHILE compound_list DO compound_list DONE
-			{ $$ = make_while_command ($2, $4); }
+			{ $$ = make_while_command ($2, $4, &($1)); }
 	|	UNTIL compound_list DO compound_list DONE
-			{ $$ = make_until_command ($2, $4); }
+			{ $$ = make_until_command ($2, $4, &($1)); }
 	|	select_command
 			{ $$ = $1; }
 	|	if_command
@@ -781,125 +795,104 @@ shell_command:	for_command
 
 for_command:	FOR WORD newline_list DO compound_list DONE
 			{
-			  $$ = make_for_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL), $5, word_lineno[word_top]);
-			  if (word_top > 0) word_top--;
+			  $$ = make_for_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL, &($2->position)), $5, &($1));
 			}
 	|	FOR WORD newline_list '{' compound_list '}'
 			{
-			  $$ = make_for_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL), $5, word_lineno[word_top]);
-			  if (word_top > 0) word_top--;
+			  $$ = make_for_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL, &($2->position)), $5, &($1));
 			}
 	|	FOR WORD ';' newline_list DO compound_list DONE
 			{
-			  $$ = make_for_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL), $6, word_lineno[word_top]);
-			  if (word_top > 0) word_top--;
+			  $$ = make_for_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL, &($2->position)), $6, &($1));
 			}
 	|	FOR WORD ';' newline_list '{' compound_list '}'
 			{
-			  $$ = make_for_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL), $6, word_lineno[word_top]);
-			  if (word_top > 0) word_top--;
+			  $$ = make_for_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL, &($2->position)), $6, &($1));
 			}
 	|	FOR WORD newline_list IN word_list list_terminator newline_list DO compound_list DONE
 			{
-			  $$ = make_for_command ($2, REVERSE_LIST ($5, WORD_LIST *), $9, word_lineno[word_top]);
-			  if (word_top > 0) word_top--;
+			  $$ = make_for_command ($2, REVERSE_LIST ($5, WORD_LIST *), $9, &($1));
 			}
 	|	FOR WORD newline_list IN word_list list_terminator newline_list '{' compound_list '}'
 			{
-			  $$ = make_for_command ($2, REVERSE_LIST ($5, WORD_LIST *), $9, word_lineno[word_top]);
-			  if (word_top > 0) word_top--;
+			  $$ = make_for_command ($2, REVERSE_LIST ($5, WORD_LIST *), $9, &($1));
 			}
 	|	FOR WORD newline_list IN list_terminator newline_list DO compound_list DONE
 			{
-			  $$ = make_for_command ($2, (WORD_LIST *)NULL, $8, word_lineno[word_top]);
-			  if (word_top > 0) word_top--;
+			  $$ = make_for_command ($2, (WORD_LIST *)NULL, $8, &($1));
 			}
 	|	FOR WORD newline_list IN list_terminator newline_list '{' compound_list '}'
 			{
-			  $$ = make_for_command ($2, (WORD_LIST *)NULL, $8, word_lineno[word_top]);
-			  if (word_top > 0) word_top--;
+			  $$ = make_for_command ($2, (WORD_LIST *)NULL, $8, &($1));
 			}
 	;
 
 arith_for_command:	FOR ARITH_FOR_EXPRS list_terminator newline_list DO compound_list DONE
 				{
-				  $$ = make_arith_for_command ($2, $6, arith_for_lineno);
-				  if (word_top > 0) word_top--;
+				  $$ = make_arith_for_command ($2, $6, &($1));
 				}
 	|		FOR ARITH_FOR_EXPRS list_terminator newline_list '{' compound_list '}'
 				{
-				  $$ = make_arith_for_command ($2, $6, arith_for_lineno);
-				  if (word_top > 0) word_top--;
+				  $$ = make_arith_for_command ($2, $6, &($1));
 				}
 	|		FOR ARITH_FOR_EXPRS DO compound_list DONE
 				{
-				  $$ = make_arith_for_command ($2, $4, arith_for_lineno);
-				  if (word_top > 0) word_top--;
+				  $$ = make_arith_for_command ($2, $4, &($1));
 				}
 	|		FOR ARITH_FOR_EXPRS '{' compound_list '}'
 				{
-				  $$ = make_arith_for_command ($2, $4, arith_for_lineno);
-				  if (word_top > 0) word_top--;
+				  $$ = make_arith_for_command ($2, $4, &($1));
 				}
 	;
 
 select_command:	SELECT WORD newline_list DO list DONE
 			{
-			  $$ = make_select_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL), $5, word_lineno[word_top]);
-			  if (word_top > 0) word_top--;
+			  $$ = make_select_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL, &($2->position)), $5, &($1));
 			}
 	|	SELECT WORD newline_list '{' list '}'
 			{
-			  $$ = make_select_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL), $5, word_lineno[word_top]);
-			  if (word_top > 0) word_top--;
+			  $$ = make_select_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL, &($2->position)), $5, &($1));
 			}
 	|	SELECT WORD ';' newline_list DO list DONE
 			{
-			  $$ = make_select_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL), $6, word_lineno[word_top]);
-			  if (word_top > 0) word_top--;
+			  $$ = make_select_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL, &($2->position)), $6, &($1));
 			}
 	|	SELECT WORD ';' newline_list '{' list '}'
 			{
-			  $$ = make_select_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL), $6, word_lineno[word_top]);
-			  if (word_top > 0) word_top--;
+			  $$ = make_select_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL, &($2->position)), $6, &($1));
 			}
 	|	SELECT WORD newline_list IN word_list list_terminator newline_list DO list DONE
 			{
-			  $$ = make_select_command ($2, REVERSE_LIST ($5, WORD_LIST *), $9, word_lineno[word_top]);
-			  if (word_top > 0) word_top--;
+			  $$ = make_select_command ($2, REVERSE_LIST ($5, WORD_LIST *), $9, &($1));
 			}
 	|	SELECT WORD newline_list IN word_list list_terminator newline_list '{' list '}'
 			{
-			  $$ = make_select_command ($2, REVERSE_LIST ($5, WORD_LIST *), $9, word_lineno[word_top]);
-			  if (word_top > 0) word_top--;
+			  $$ = make_select_command ($2, REVERSE_LIST ($5, WORD_LIST *), $9, &($1));
 			}
 	;
 
 case_command:	CASE WORD newline_list IN newline_list ESAC
 			{
-			  $$ = make_case_command ($2, (PATTERN_LIST *)NULL, word_lineno[word_top]);
-			  if (word_top > 0) word_top--;
+			  $$ = make_case_command ($2, (PATTERN_LIST *)NULL, &($1));
 			}
 	|	CASE WORD newline_list IN case_clause_sequence newline_list ESAC
 			{
-			  $$ = make_case_command ($2, $5, word_lineno[word_top]);
-			  if (word_top > 0) word_top--;
+			  $$ = make_case_command ($2, $5, &($1));
 			}
 	|	CASE WORD newline_list IN case_clause ESAC
 			{
-			  $$ = make_case_command ($2, $5, word_lineno[word_top]);
-			  if (word_top > 0) word_top--;
+			  $$ = make_case_command ($2, $5, &($1));
 			}
 	;
 
 function_def:	WORD '(' ')' newline_list function_body
-			{ $$ = make_function_def ($1, $5, function_dstart, function_bstart); }
+			{ $$ = make_function_def ($1, $5, &($1->position)); }
 
 	|	FUNCTION WORD '(' ')' newline_list function_body
-			{ $$ = make_function_def ($2, $6, function_dstart, function_bstart); }
+			{ $$ = make_function_def ($2, $6, &($1)); }
 
 	|	FUNCTION WORD newline_list function_body
-			{ $$ = make_function_def ($2, $4, function_dstart, function_bstart); }
+			{ $$ = make_function_def ($2, $4, &($1)); }
 	;
 
 function_body:	shell_command
@@ -944,7 +937,7 @@ subshell:	'(' compound_list ')'
 
 coproc:		COPROC shell_command
 			{
-			  $$ = make_coproc_command ("COPROC", $2);
+			  $$ = make_coproc_command ("COPROC", $2, &($1));
 			  $$->flags |= CMD_WANT_SUBSHELL|CMD_COPROC_SUBSHELL;
 			}
 	|	COPROC shell_command redirection_list
@@ -961,12 +954,12 @@ coproc:		COPROC shell_command
 			    }
 			  else
 			    tc->redirects = $3;
-			  $$ = make_coproc_command ("COPROC", $2);
+			  $$ = make_coproc_command ("COPROC", $2, &($1));
 			  $$->flags |= CMD_WANT_SUBSHELL|CMD_COPROC_SUBSHELL;
 			}
 	|	COPROC WORD shell_command
 			{
-			  $$ = make_coproc_command ($2->word, $3);
+			  $$ = make_coproc_command ($2->word, $3, &($1));
 			  $$->flags |= CMD_WANT_SUBSHELL|CMD_COPROC_SUBSHELL;
 			}
 	|	COPROC WORD shell_command redirection_list
@@ -983,22 +976,22 @@ coproc:		COPROC shell_command
 			    }
 			  else
 			    tc->redirects = $4;
-			  $$ = make_coproc_command ($2->word, $3);
+			  $$ = make_coproc_command ($2->word, $3, &($1));
 			  $$->flags |= CMD_WANT_SUBSHELL|CMD_COPROC_SUBSHELL;
 			}
 	|	COPROC simple_command
 			{
-			  $$ = make_coproc_command ("COPROC", clean_simple_command ($2));
+			  $$ = make_coproc_command ("COPROC", clean_simple_command ($2), &($1));
 			  $$->flags |= CMD_WANT_SUBSHELL|CMD_COPROC_SUBSHELL;
 			}
 	;
 
 if_command:	IF compound_list THEN compound_list FI
-			{ $$ = make_if_command ($2, $4, (COMMAND *)NULL); }
+			{ $$ = make_if_command ($2, $4, (COMMAND *)NULL, &($1)); }
 	|	IF compound_list THEN compound_list ELSE compound_list FI
-			{ $$ = make_if_command ($2, $4, $6); }
+			{ $$ = make_if_command ($2, $4, $6, &($1)); }
 	|	IF compound_list THEN compound_list elif_clause FI
-			{ $$ = make_if_command ($2, $4, $5); }
+			{ $$ = make_if_command ($2, $4, $5, &($1)); }
 	;
 
 
@@ -1007,7 +1000,7 @@ group_command:	'{' compound_list '}'
 	;
 
 arith_command:	ARITH_CMD
-			{ $$ = make_arith_command ($1); }
+			{ $$ = make_arith_command ($1, &$1->position); }
 	;
 
 cond_command:	COND_START COND_CMD COND_END
@@ -1015,11 +1008,17 @@ cond_command:	COND_START COND_CMD COND_END
 	; 
 
 elif_clause:	ELIF compound_list THEN compound_list
-			{ $$ = make_if_command ($2, $4, (COMMAND *)NULL); }
+			{ $$ = make_if_command ($2, $4, (COMMAND *)NULL, &($1));
+			  $$->flags |= CMD_ELIF;
+            }
 	|	ELIF compound_list THEN compound_list ELSE compound_list
-			{ $$ = make_if_command ($2, $4, $6); }
+			{ $$ = make_if_command ($2, $4, $6, &($1));
+			  $$->flags |= CMD_ELIF;
+			}
 	|	ELIF compound_list THEN compound_list elif_clause
-			{ $$ = make_if_command ($2, $4, $5); }
+			{ $$ = make_if_command ($2, $4, $5, &($1));
+			  $$->flags |= CMD_ELIF;
+            }
 	;
 
 case_clause:	pattern_list
@@ -1113,11 +1112,11 @@ simple_list_terminator:	'\n'
 	;
 
 list_terminator:'\n'
-		{ $$ = '\n'; }
+		{ $$.value = '\n'; $$.position = position; }
 	|	';'
-		{ $$ = ';'; }
+		{ $$.value = ';'; $$.position = position; }
 	|	yacc_EOF
-		{ $$ = yacc_EOF; }
+		{ $$.value = yacc_EOF; $$.position = position; }
 	;
 
 newline_list:
@@ -1196,15 +1195,19 @@ pipeline_command: pipeline
 			{ $$ = $1; }			
 	|	BANG pipeline_command
 			{
-			  if ($2)
+			  if ($2) {
 			    $2->flags ^= CMD_INVERT_RETURN;	/* toggle */
+			  }
 			  $$ = $2;
+              $$->position = $1;
 			}
 	|	timespec pipeline_command
 			{
-			  if ($2)
-			    $2->flags |= $1;
+			  if ($2) {
+			    $2->flags |= $1.value;
+              }
 			  $$ = $2;
+              $$->position = $1.position;
 			}
 	|	timespec list_terminator
 			{
@@ -1217,10 +1220,10 @@ pipeline_command: pipeline
 			     terminate this, one to terminate the command) */
 			  x.word = 0;
 			  x.redirect = 0;
-			  $$ = make_simple_command (x, (COMMAND *)NULL);
-			  $$->flags |= $1;
+			  $$ = make_simple_command (x, (COMMAND *)NULL, &($1.position));
+			  $$->flags |= $1.value;
 			  /* XXX - let's cheat and push a newline back */
-			  if ($2 == '\n')
+			  if ($2.value == '\n')
 			    token_to_read = '\n';
 			}
 	|	BANG list_terminator
@@ -1235,10 +1238,10 @@ pipeline_command: pipeline
 			     terminate this, one to terminate the command) */
 			  x.word = 0;
 			  x.redirect = 0;
-			  $$ = make_simple_command (x, (COMMAND *)NULL);
+			  $$ = make_simple_command (x, (COMMAND *)NULL, &($1));
 			  $$->flags |= CMD_INVERT_RETURN;
 			  /* XXX - let's cheat and push a newline back */
-			  if ($2 == '\n')
+			  if ($2.value == '\n')
 			    token_to_read = '\n';
 			}
 	;
@@ -1273,11 +1276,11 @@ pipeline:	pipeline '|' newline_list pipeline
 	;
 
 timespec:	TIME
-			{ $$ = CMD_TIME_PIPELINE; }
+			{ $$.value = CMD_TIME_PIPELINE; $$.position = $1; }
 	|	TIME TIMEOPT
-			{ $$ = CMD_TIME_PIPELINE|CMD_TIME_POSIX; }
+			{ $$.value = CMD_TIME_PIPELINE|CMD_TIME_POSIX; $$.position = $1; }
 	|	TIME TIMEOPT TIMEIGN
-			{ $$ = CMD_TIME_PIPELINE|CMD_TIME_POSIX; }
+			{ $$.value = CMD_TIME_PIPELINE|CMD_TIME_POSIX; $$.position = $1; }
 	;
 %%
 
@@ -1375,9 +1378,26 @@ yy_input_name ()
 
 /* Call this to get the next character of input. */
 static int
-yy_getc ()
+yy_getc_peek ()
 {
   return (*(bash_input.getter)) ();
+}
+
+/* Call this to get the next character of input. */
+static int
+yy_getc ()
+{
+  int c;
+
+  c = (*(bash_input.getter))();
+  position.byte++;
+  if (c == '\n') {
+	position.line++;
+	position.column = 0;
+  } else {
+    position.column++;
+  }
+  return c;
 }
 
 /* Call this to unget C.  That is, to make C the next character
@@ -1386,6 +1406,8 @@ static int
 yy_ungetc (c)
      int c;
 {
+  position.byte--;
+  position.column--;
   return (*(bash_input.ungetter)) (c);
 }
 
@@ -1643,16 +1665,11 @@ typedef struct stream_saver {
   struct stream_saver *next;
   BASH_INPUT bash_input;
   int line;
+  POSITION position;
 #if defined (BUFFERED_INPUT)
   BUFFERED_STREAM *bstream;
 #endif /* BUFFERED_INPUT */
 } STREAM_SAVER;
-
-/* The globally known line number. */
-int line_number = 0;
-
-/* The line number offset set by assigning to LINENO.  Not currently used. */
-int line_number_base = 0;
 
 #if defined (COND_COMMAND)
 static int cond_lineno;
@@ -1677,13 +1694,17 @@ push_stream (reset_lineno)
     					  (BUFFERED_STREAM *)NULL);
 #endif /* BUFFERED_INPUT */
 
-  saver->line = line_number;
+  saver->line     = line_number;
+  saver->position = position;
   bash_input.name = (char *)NULL;
   saver->next = stream_list;
   stream_list = saver;
   EOF_Reached = 0;
-  if (reset_lineno)
-    line_number = 0;
+  if (reset_lineno) {
+    line_number     = 0;
+    position.line   = 0;
+	position.column = 0;
+  }
 }
 
 void
@@ -1726,7 +1747,9 @@ pop_stream ()
 	}
 #endif /* BUFFERED_INPUT */
 
-      line_number = saver->line;
+      line_number          = saver->line;
+      saver->position.byte = position.byte;
+      position    = saver->position;
 
       FREE (saver->bash_input.name);
       free (saver);
@@ -1735,8 +1758,7 @@ pop_stream ()
 
 /* Return 1 if a stream of type TYPE is saved on the stack. */
 int
-stream_on_stack (type)
-     enum stream_type type;
+stream_on_stack (enum stream_type type)
 {
   register STREAM_SAVER *s;
 
@@ -1918,8 +1940,7 @@ free_pushed_string_input ()
    is non-zero, we remove unquoted \<newline> pairs.  This is used by
    read_secondary_line to read here documents. */
 static char *
-read_a_line (remove_quoted_newline)
-     int remove_quoted_newline;
+read_a_line (int remove_quoted_newline)
 {
   static char *line_buffer = (char *)NULL;
   static int buffer_size = 0;
@@ -1976,10 +1997,12 @@ read_a_line (remove_quoted_newline)
       else if (c == '\\' && remove_quoted_newline)
 	{
 	  QUIT;
-	  peekc = yy_getc ();
+	  peekc = yy_getc_peek ();
 	  if (peekc == '\n')
 	    {
-	      line_number++;
+          line_number++;
+		  position.line++;
+		  position.column = 0;
 	      continue;	/* Make the unquoted \<newline> pair disappear. */
 	    }
 	  else
@@ -2006,8 +2029,7 @@ read_a_line (remove_quoted_newline)
    newlines quoted with backslashes while reading the line.  It is
    non-zero unless the delimiter of the here document was quoted. */
 char *
-read_secondary_line (remove_quoted_newline)
-     int remove_quoted_newline;
+read_secondary_line (int remove_quoted_newline)
 {
   char *ret;
   int n, c;
@@ -2160,8 +2182,7 @@ static struct dstack temp_dstack = { (char *)NULL, 0, 0 };
 static int eol_ungetc_lookahead = 0;
 
 static int
-shell_getc (remove_quoted_newline)
-     int remove_quoted_newline;
+shell_getc (int remove_quoted_newline)
 {
   register int i;
   int c;
@@ -2179,7 +2200,13 @@ shell_getc (remove_quoted_newline)
     {
       c = eol_ungetc_lookahead;
       eol_ungetc_lookahead = 0;
-      return (c);
+	  if (c == '\n') {
+		++line_number;
+		position.line++;
+		position.column = 0;
+	  }
+	  position.byte++;
+	  return(c);
     }
 
 #if defined (ALIAS) || defined (DPAREN_ARITHMETIC)
@@ -2194,6 +2221,8 @@ shell_getc (remove_quoted_newline)
 #endif /* !ALIAS && !DPAREN_ARITHMETIC */
     {
       line_number++;
+      position.line++;
+      position.column = 0;
 
     restart_read:
 
@@ -2387,9 +2416,12 @@ pop_alias:
 
   if MBTEST(uc == '\\' && remove_quoted_newline && shell_input_line[shell_input_line_index] == '\n')
     {
-	if (SHOULD_PROMPT ())
+	if (SHOULD_PROMPT ()) {
 	  prompt_again ();
-	line_number++;
+    }
+    line_number++;
+    position.line++;
+    position.column = 0;
 	/* What do we do here if we're expanding an alias whose definition
 	   includes an escaped newline?  If that's the last character in the
 	   alias expansion, we just pop the pushed string list (recall that
@@ -2422,9 +2454,9 @@ pop_alias:
    character different than we read, shell_input_line_property doesn't need
    to change when manipulating shell_input_line.  The define for
    last_shell_getc_is_singlebyte should take care of it, though. */
+
 static void
-shell_ungetc (c)
-     int c;
+shell_ungetc (int c)
 {
   if (shell_input_line && shell_input_line_index)
     shell_input_line[--shell_input_line_index] = c;
@@ -2445,8 +2477,7 @@ shell_ungetchar ()
 /* Discard input until CHARACTER is seen, then push that character back
    onto the input stream. */
 static void
-discard_until (character)
-     int character;
+discard_until (int character)
 {
   int c;
 
@@ -2548,7 +2579,7 @@ gather_here_documents ()
   while (need_here_doc)
     {
       parser_state |= PST_HEREDOC;
-      make_here_document (redir_stack[r++], line_number);
+      make_here_document (redir_stack[r++], &position);
       parser_state &= ~PST_HEREDOC;
       need_here_doc--;
     }
@@ -2787,7 +2818,7 @@ special_case_tokens (tokstr)
       if (tokstr[0] == '{' && tokstr[1] == '\0')		/* } */
 	{
 	  open_brace_count++;
-	  function_bstart = line_number;
+	  function_bstart = position.line;
 	  return ('{');					/* } */
 	}
     }
@@ -2870,6 +2901,10 @@ read_token (command)
   int character;		/* Current character. */
   int peek_char;		/* Temporary look-ahead character. */
   int result;			/* The thing to return. */
+  POSITION start_position;
+
+  /* Always ensure position is available */
+  yylval.position = start_position = position;
 
   if (command == RESET)
     {
@@ -2893,7 +2928,7 @@ read_token (command)
 #if defined (COND_COMMAND)
   if ((parser_state & (PST_CONDCMD|PST_CONDEXPR)) == PST_CONDCMD)
     {
-      cond_lineno = line_number;
+      cond_lineno = position.line;
       parser_state |= PST_CONDEXPR;
       yylval.command = parse_cond_command ();
       if (cond_token != COND_END)
@@ -2914,14 +2949,16 @@ read_token (command)
 #endif /* ALIAS */
 
   /* Read a single word from input.  Start by skipping blanks. */
-  while ((character = shell_getc (1)) != EOF && shellblank (character))
-    ;
+
+  while ((character = shell_getc (1)) != EOF && shellblank (character));
 
   if (character == EOF)
     {
       EOF_Reached = 1;
       return (yacc_EOF);
     }
+
+  yylval.position = start_position = position;
 
   if MBTEST(character == '#' && (!interactive || interactive_comments))
     {
@@ -3007,7 +3044,7 @@ read_token (command)
 
 #if defined (DPAREN_ARITHMETIC) || defined (ARITH_FOR_COMMAND)
 	    case '(':		/* ) */
-	      result = parse_dparen (character);
+	      result = parse_dparen (character, &start_position);
 	      if (result == -2)
 	        break;
 	      else
@@ -3056,7 +3093,7 @@ read_token (command)
 #if defined (ALIAS)
 	  parser_state &= ~PST_ALEXPNEXT;
 #endif /* ALIAS */
-	  function_dstart = line_number;
+	  function_dstart = position.line;
 	}
 
       /* case pattern lists may be preceded by an optional left paren.  If
@@ -3158,7 +3195,7 @@ parse_matched_pair (qc, open, close, lenp, flags)
 
   dolbrace_state = (flags & P_DOLBRACE) ? DOLBRACE_PARAM : 0;
 
-/*itrace("parse_matched_pair[%d]: open = %c close = %c flags = %d", line_number, open, close, flags);*/
+/*itrace("parse_matched_pair[%d]: open = %c close = %c flags = %d", position.line, open, close, flags);*/
   count = 1;
   tflags = 0;
 
@@ -3171,7 +3208,7 @@ parse_matched_pair (qc, open, close, lenp, flags)
   ret = (char *)xmalloc (retsize = 64);
   retind = 0;
 
-  start_lineno = line_number;
+  start_lineno = position.line;
   while (count)
     {
       ch = shell_getc (qc != '\'' && (tflags & (LEX_PASSNEXT)) == 0);
@@ -3395,7 +3432,7 @@ parse_dollar_word:
   ret[retind] = '\0';
   if (lenp)
     *lenp = retind;
-/*itrace("parse_matched_pair[%d]: returning %s", line_number, ret);*/
+/*itrace("parse_matched_pair[%d]: returning %s", position.line, ret);*/
   return ret;
 }
 
@@ -3434,7 +3471,7 @@ parse_comsub (qc, open, close, lenp, flags)
   ret = (char *)xmalloc (retsize = 64);
   retind = 0;
 
-  start_lineno = line_number;
+  start_lineno = position.line;
   lex_rwlen = lex_wlen = 0;
 
   heredelim = 0;
@@ -3477,7 +3514,7 @@ eof_error:
 	      if (STREQN (ret + tind, heredelim, hdlen))
 		{
 		  tflags &= ~(LEX_STRIPDOC|LEX_INHEREDOC);
-/*itrace("parse_comsub:%d: found here doc end `%s'", line_number, ret + tind);*/
+/*itrace("parse_comsub:%d: found here doc end `%s'", position.line, ret + tind);*/
 		  free (heredelim);
 		  heredelim = 0;
 		  lex_firstind = -1;
@@ -3503,7 +3540,7 @@ eof_error:
 	  if (retind-tind == hdlen && STREQN (ret + tind, heredelim, hdlen))
 	    {
 	      tflags &= ~(LEX_STRIPDOC|LEX_INHEREDOC);
-/*itrace("parse_comsub:%d: found here doc end `%s'", line_number, ret + tind);*/
+/*itrace("parse_comsub:%d: found here doc end `%s'", position.line, ret + tind);*/
 	      free (heredelim);
 	      heredelim = 0;
 	      lex_firstind = -1;
@@ -3519,7 +3556,7 @@ eof_error:
 
 	  if ((tflags & LEX_INCOMMENT) && ch == '\n')
 {
-/*itrace("parse_comsub:%d: lex_incomment -> 0 ch = `%c'", line_number, ch);*/
+/*itrace("parse_comsub:%d: lex_incomment -> 0 ch = `%c'", position.line, ch);*/
 	    tflags &= ~LEX_INCOMMENT;
 }
 
@@ -3528,7 +3565,7 @@ eof_error:
 
       if (tflags & LEX_PASSNEXT)		/* last char was backslash */
 	{
-/*itrace("parse_comsub:%d: lex_passnext -> 0 ch = `%c' (%d)", line_number, ch, __LINE__);*/
+/*itrace("parse_comsub:%d: lex_passnext -> 0 ch = `%c' (%d)", position.line, ch, __LINE__);*/
 	  tflags &= ~LEX_PASSNEXT;
 	  if (qc != '\'' && ch == '\n')	/* double-quoted \<newline> disappears. */
 	    {
@@ -3549,18 +3586,18 @@ eof_error:
       if MBTEST(shellbreak (ch))
 	{
 	  tflags &= ~LEX_INWORD;
-/*itrace("parse_comsub:%d: lex_inword -> 0 ch = `%c' (%d)", line_number, ch, __LINE__);*/
+/*itrace("parse_comsub:%d: lex_inword -> 0 ch = `%c' (%d)", position.line, ch, __LINE__);*/
 	}
       else
 	{
 	  if (tflags & LEX_INWORD)
 	    {
 	      lex_wlen++;
-/*itrace("parse_comsub:%d: lex_inword == 1 ch = `%c' lex_wlen = %d (%d)", line_number, ch, lex_wlen, __LINE__);*/
+/*itrace("parse_comsub:%d: lex_inword == 1 ch = `%c' lex_wlen = %d (%d)", position.line, ch, lex_wlen, __LINE__);*/
 	    }	      
 	  else
 	    {
-/*itrace("parse_comsub:%d: lex_inword -> 1 ch = `%c' (%d)", line_number, ch, __LINE__);*/
+/*itrace("parse_comsub:%d: lex_inword -> 1 ch = `%c' (%d)", position.line, ch, __LINE__);*/
 	      tflags |= LEX_INWORD;
 	      lex_wlen = 0;
 	    }
@@ -3602,7 +3639,7 @@ eof_error:
 		  heredelim = string_quote_removal (nestret, 0);
 		  free (nestret);
 		  hdlen = STRLEN(heredelim);
-/*itrace("parse_comsub:%d: found here doc delimiter `%s' (%d)", line_number, heredelim, hdlen);*/
+/*itrace("parse_comsub:%d: found here doc delimiter `%s' (%d)", position.line, heredelim, hdlen);*/
 		}
 	      if (ch == '\n')
 		{
@@ -3626,7 +3663,7 @@ eof_error:
 	    {
 	      RESIZE_MALLOCED_BUFFER (ret, retind, 1, retsize, 64);
 	      ret[retind++] = peekc;
-/*itrace("parse_comsub:%d: set lex_reswordok = 1, ch = `%c'", line_number, ch);*/
+/*itrace("parse_comsub:%d: set lex_reswordok = 1, ch = `%c'", position.line, ch);*/
 	      tflags |= LEX_RESWDOK;
 	      lex_rwlen = 0;
 	      continue;
@@ -3634,7 +3671,7 @@ eof_error:
 	  else if (ch == '\n' || COMSUB_META(ch))
 	    {
 	      shell_ungetc (peekc);
-/*itrace("parse_comsub:%d: set lex_reswordok = 1, ch = `%c'", line_number, ch);*/
+/*itrace("parse_comsub:%d: set lex_reswordok = 1, ch = `%c'", position.line, ch);*/
 	      tflags |= LEX_RESWDOK;
 	      lex_rwlen = 0;
 	      continue;
@@ -3665,12 +3702,12 @@ eof_error:
 	      if (STREQN (ret + retind - 4, "case", 4))
 {
 		tflags |= LEX_INCASE;
-/*itrace("parse_comsub:%d: found `case', lex_incase -> 1 lex_reswdok -> 0", line_number);*/
+/*itrace("parse_comsub:%d: found `case', lex_incase -> 1 lex_reswdok -> 0", position.line);*/
 }
 	      else if (STREQN (ret + retind - 4, "esac", 4))
 {
 		tflags &= ~LEX_INCASE;
-/*itrace("parse_comsub:%d: found `esac', lex_incase -> 0 lex_reswdok -> 0", line_number);*/
+/*itrace("parse_comsub:%d: found `esac', lex_incase -> 0 lex_reswdok -> 0", position.line);*/
 }	        
 	      tflags &= ~LEX_RESWDOK;
 	    }
@@ -3684,12 +3721,12 @@ eof_error:
 	       turn off LEX_RESWDOK, since we're going to read a pattern list. */
 {
 	    tflags &= ~LEX_RESWDOK;
-/*itrace("parse_comsub:%d: lex_incase == 1 found `%c', lex_reswordok -> 0", line_number, ch);*/
+/*itrace("parse_comsub:%d: lex_incase == 1 found `%c', lex_reswordok -> 0", position.line, ch);*/
 }
 	  else if MBTEST(shellbreak (ch) == 0)
 {
 	    tflags &= ~LEX_RESWDOK;
-/*itrace("parse_comsub:%d: found `%c', lex_reswordok -> 0", line_number, ch);*/
+/*itrace("parse_comsub:%d: found `%c', lex_reswordok -> 0", position.line, ch);*/
 }
 	}
 
@@ -3729,7 +3766,7 @@ eof_error:
 	}
       else if MBTEST((tflags & LEX_CKCOMMENT) && (tflags & LEX_INCOMMENT) == 0 && ch == '#' && (((tflags & LEX_RESWDOK) && lex_rwlen == 0) || ((tflags & LEX_INWORD) && lex_wlen == 0)))
 {
-/*itrace("parse_comsub:%d: lex_incomment -> 1 (%d)", line_number, __LINE__);*/
+/*itrace("parse_comsub:%d: lex_incomment -> 1 (%d)", position.line, __LINE__);*/
 	tflags |= LEX_INCOMMENT;
 }
 
@@ -3747,12 +3784,12 @@ eof_error:
       else if MBTEST(ch == close && (tflags & LEX_INCASE) == 0)		/* ending delimiter */
 {
 	count--;
-/*itrace("parse_comsub:%d: found close: count = %d", line_number, count);*/
+/*itrace("parse_comsub:%d: found close: count = %d", position.line, count);*/
 }
       else if MBTEST(((flags & P_FIRSTCLOSE) == 0) && (tflags & LEX_INCASE) == 0 && ch == open)	/* nested begin */
 {
 	count++;
-/*itrace("parse_comsub:%d: found open: count = %d", line_number, count);*/
+/*itrace("parse_comsub:%d: found open: count = %d", position.line, count);*/
 }
 
       /* Add this character. */
@@ -3838,7 +3875,7 @@ eof_error:
   ret[retind] = '\0';
   if (lenp)
     *lenp = retind;
-/*itrace("parse_comsub:%d: returning `%s'", line_number, ret);*/
+/*itrace("parse_comsub:%d: returning `%s'", position.line, ret);*/
   return ret;
 }
 
@@ -3882,7 +3919,7 @@ xparse_dolparen (base, string, indp, flags)
     {
 #if DEBUG
       if (ep[-1] != '\n')
-	itrace("xparse_dolparen:%d: ep[-1] != RPAREN (%d), ep = `%s'", line_number, ep[-1], ep);
+	itrace("xparse_dolparen:%d: ep[-1] != RPAREN (%d), ep = `%s'", position.line, ep[-1], ep);
 #endif
       while (ep > ostring && ep[-1] == '\n') ep--;
     }
@@ -3893,7 +3930,7 @@ xparse_dolparen (base, string, indp, flags)
   /*(*/
 #if DEBUG
   if (base[*indp] != ')')
-    itrace("xparse_dolparen:%d: base[%d] != RPAREN (%d), base = `%s'", line_number, *indp, base[*indp], base);
+    itrace("xparse_dolparen:%d: base[%d] != RPAREN (%d), base = `%s'", position.line, *indp, base[*indp], base);
 #endif
 
   if (flags & SX_NOALLOC) 
@@ -3916,8 +3953,7 @@ xparse_dolparen (base, string, indp, flags)
    the parsed token, -1 on error, or -2 if we didn't do anything and
    should just go on. */
 static int
-parse_dparen (c)
-     int c;
+parse_dparen (int c, POSITION *positionP)
 {
   int cmdtyp, sline;
   char *wval;
@@ -3926,12 +3962,13 @@ parse_dparen (c)
 #if defined (ARITH_FOR_COMMAND)
   if (last_read_token == FOR)
     {
-      arith_for_lineno = line_number;
+      arith_for_lineno = position.line;
       cmdtyp = parse_arith_cmd (&wval, 0);
       if (cmdtyp == 1)
 	{
 	  wd = alloc_word_desc ();
 	  wd->word = wval;
+      wd->position = *positionP;
 	  yylval.word_list = make_word_list (wd, (WORD_LIST *)NULL);
 	  return (ARITH_FOR_EXPRS);
 	}
@@ -3943,7 +3980,7 @@ parse_dparen (c)
 #if defined (DPAREN_ARITHMETIC)
   if (reserved_word_acceptable (last_read_token))
     {
-      sline = line_number;
+      sline = position.line;
 
       cmdtyp = parse_arith_cmd (&wval, 0);
       if (cmdtyp == 1)	/* arithmetic command */
@@ -3951,6 +3988,7 @@ parse_dparen (c)
 	  wd = alloc_word_desc ();
 	  wd->word = wval;
 	  wd->flags = W_QUOTED|W_NOSPLIT|W_NOGLOB|W_DQUOTE;
+      wd->position = *positionP;
 	  yylval.word_list = make_word_list (wd, (WORD_LIST *)NULL);
 	  return (ARITH_CMD);
 	}
@@ -3983,7 +4021,7 @@ parse_arith_cmd (ep, adddq)
   char *ttok, *tokstr;
   int ttoklen;
 
-  exp_lineno = line_number;
+  exp_lineno = position.line;
   ttok = parse_matched_pair (0, '(', ')', &ttoklen, 0);
   rval = 1;
   if (ttok == &matched_pair_error)
@@ -4059,7 +4097,7 @@ cond_or ()
   if (cond_token == OR_OR)
     {
       r = cond_or ();
-      l = make_cond_node (COND_OR, (WORD_DESC *)NULL, l, r);
+      l = make_cond_node (COND_OR, (WORD_DESC *)NULL, l, r, &(l->position));
     }
   return l;
 }
@@ -4073,7 +4111,7 @@ cond_and ()
   if (cond_token == AND_AND)
     {
       r = cond_and ();
-      l = make_cond_node (COND_AND, (WORD_DESC *)NULL, l, r);
+      l = make_cond_node (COND_AND, (WORD_DESC *)NULL, l, r, &(l->position));
     }
   return l;
 }
@@ -4099,12 +4137,14 @@ cond_term ()
   COND_COM *term, *tleft, *tright;
   int tok, lineno;
   char *etext;
+  POSITION start_position;
 
   /* Read a token.  It can be a left paren, a `!', a unary operator, or a
      word that should be the first argument of a binary operator.  Start by
      skipping newlines, since this is a compound command. */
   tok = cond_skip_newlines ();
-  lineno = line_number;
+  start_position = position;
+  lineno = position.line;
   if (tok == COND_END)
     {
       COND_RETURN_ERROR ();
@@ -4125,13 +4165,15 @@ cond_term ()
 	    parser_error (lineno, _("expected `)'"));
 	  COND_RETURN_ERROR ();
 	}
-      term = make_cond_node (COND_EXPR, (WORD_DESC *)NULL, term, (COND_COM *)NULL);
+      term = make_cond_node (COND_EXPR, (WORD_DESC *)NULL, term, (COND_COM *)NULL, &start_position);
       (void)cond_skip_newlines ();
     }
   else if (tok == BANG || (tok == WORD && (yylval.word->word[0] == '!' && yylval.word->word[1] == '\0')))
     {
-      if (tok == WORD)
+      if (tok == WORD) {
 	dispose_word (yylval.word);	/* not needed */
+	yylval.position = position;
+      }
       term = cond_term ();
       if (term)
 	term->flags |= CMD_INVERT_RETURN;
@@ -4142,19 +4184,19 @@ cond_term ()
       tok = read_token (READ);
       if (tok == WORD)
 	{
-	  tleft = make_cond_node (COND_TERM, yylval.word, (COND_COM *)NULL, (COND_COM *)NULL);
-	  term = make_cond_node (COND_UNARY, op, tleft, (COND_COM *)NULL);
+	  tleft = make_cond_node (COND_TERM, yylval.word, (COND_COM *)NULL, (COND_COM *)NULL, &start_position);
+	  term = make_cond_node (COND_UNARY, op, tleft, (COND_COM *)NULL, &start_position);
 	}
       else
 	{
 	  dispose_word (op);
 	  if (etext = error_token_from_token (tok))
 	    {
-	      parser_error (line_number, _("unexpected argument `%s' to conditional unary operator"), etext);
+	      parser_error (position.line, _("unexpected argument `%s' to conditional unary operator"), etext);
 	      free (etext);
 	    }
 	  else
-	    parser_error (line_number, _("unexpected argument to conditional unary operator"));
+	    parser_error (position.line, _("unexpected argument to conditional unary operator"));
 	  COND_RETURN_ERROR ();
 	}
 
@@ -4163,7 +4205,7 @@ cond_term ()
   else if (tok == WORD)		/* left argument to binary operator */
     {
       /* lhs */
-      tleft = make_cond_node (COND_TERM, yylval.word, (COND_COM *)NULL, (COND_COM *)NULL);
+      tleft = make_cond_node (COND_TERM, yylval.word, (COND_COM *)NULL, (COND_COM *)NULL, &start_position);
 
       /* binop */
       tok = read_token (READ);
@@ -4183,7 +4225,7 @@ cond_term ()
 	}
 #endif
       else if (tok == '<' || tok == '>')
-	op = make_word_from_token (tok);  /* ( */
+	op = make_word_from_token (tok, &start_position);  /* ( */
       /* There should be a check before blindly accepting the `)' that we have
 	 seen the opening `('. */
       else if (tok == COND_END || tok == AND_AND || tok == OR_OR || tok == ')')
@@ -4191,8 +4233,8 @@ cond_term ()
 	  /* Special case.  [[ x ]] is equivalent to [[ -n x ]], just like
 	     the test command.  Similarly for [[ x && expr ]] or
 	     [[ x || expr ]] or [[ (x) ]]. */
-	  op = make_word ("-n");
-	  term = make_cond_node (COND_UNARY, op, tleft, (COND_COM *)NULL);
+	  op = make_word ("-n", &start_position);
+	  term = make_cond_node (COND_UNARY, op, tleft, (COND_COM *)NULL, &start_position);
 	  cond_token = tok;
 	  return (term);
 	}
@@ -4200,11 +4242,11 @@ cond_term ()
 	{
 	  if (etext = error_token_from_token (tok))
 	    {
-	      parser_error (line_number, _("unexpected token `%s', conditional binary operator expected"), etext);
+	      parser_error (position.line, _("unexpected token `%s', conditional binary operator expected"), etext);
 	      free (etext);
 	    }
 	  else
-	    parser_error (line_number, _("conditional binary operator expected"));
+	    parser_error (position.line, _("conditional binary operator expected"));
 	  dispose_cond_node (tleft);
 	  COND_RETURN_ERROR ();
 	}
@@ -4219,18 +4261,18 @@ cond_term ()
 
       if (tok == WORD)
 	{
-	  tright = make_cond_node (COND_TERM, yylval.word, (COND_COM *)NULL, (COND_COM *)NULL);
-	  term = make_cond_node (COND_BINARY, op, tleft, tright);
+	  tright = make_cond_node (COND_TERM, yylval.word, (COND_COM *)NULL, (COND_COM *)NULL, &start_position);
+	  term = make_cond_node (COND_BINARY, op, tleft, tright, &start_position);
 	}
       else
 	{
 	  if (etext = error_token_from_token (tok))
 	    {
-	      parser_error (line_number, _("unexpected argument `%s' to conditional binary operator"), etext);
+	      parser_error (position.line, _("unexpected argument `%s' to conditional binary operator"), etext);
 	      free (etext);
 	    }
 	  else
-	    parser_error (line_number, _("unexpected argument to conditional binary operator"));
+	    parser_error (position.line, _("unexpected argument to conditional binary operator"));
 	  dispose_cond_node (tleft);
 	  dispose_word (op);
 	  COND_RETURN_ERROR ();
@@ -4241,14 +4283,14 @@ cond_term ()
   else
     {
       if (tok < 256)
-	parser_error (line_number, _("unexpected token `%c' in conditional command"), tok);
+	parser_error (position.line, _("unexpected token `%c' in conditional command"), tok);
       else if (etext = error_token_from_token (tok))
 	{
-	  parser_error (line_number, _("unexpected token `%s' in conditional command"), etext);
+	  parser_error (position.line, _("unexpected token `%s' in conditional command"), etext);
 	  free (etext);
 	}
       else
-	parser_error (line_number, _("unexpected token %d in conditional command"), tok);
+	parser_error (position.line, _("unexpected token %d in conditional command"), tok);
       COND_RETURN_ERROR ();
     }
   return (term);
@@ -4263,7 +4305,7 @@ parse_cond_command ()
 
   global_extglob = extended_glob;
   cexp = cond_expr ();
-  return (make_cond_command (cexp));
+  return (make_cond_command (cexp, &cexp->position));
 }
 #endif
 
@@ -4303,8 +4345,7 @@ token_is_ident (t, i)
 #endif
 
 static int
-read_token_word (character)
-     int character;
+read_token_word (int character)
 {
   /* The value for YYLVAL when a WORD is read. */
   WORD_DESC *the_word;
@@ -4335,11 +4376,14 @@ read_token_word (character)
   char *ttok, *ttrans;
   int ttoklen, ttranslen;
   intmax_t lvalue;
+  POSITION start_position;
 
+  start_position = position;
   if (token_buffer_size < TOKEN_DEFAULT_INITIAL_SIZE)
     token = (char *)xrealloc (token, token_buffer_size = TOKEN_DEFAULT_INITIAL_SIZE);
 
   token_index = 0;
+  start_position = position;
   all_digit_token = DIGIT (character);
   dollar_present = quoted = pass_next_character = compound_assignment = 0;
 
@@ -4499,7 +4543,7 @@ read_token_word (character)
 	    {
 	      int first_line;
 
-	      first_line = line_number;
+	      first_line = position.line;
 	      push_delimiter (dstack, peek_char);
 	      ttok = parse_matched_pair (peek_char, peek_char, peek_char,
 					 &ttoklen,
@@ -4665,10 +4709,12 @@ got_token:
 		    last_read_token == LESS_AND || \
 		    last_read_token == GREATER_AND))
       {
-	if (legal_number (token, &lvalue) && (int)lvalue == lvalue)
-	  yylval.number = lvalue;
-	else
-	  yylval.number = -1;
+	if (legal_number (token, &lvalue) && (int)lvalue == lvalue) {
+	  yylval.number.value = lvalue;
+	} else {
+	  yylval.number.value = -1;
+    }
+    yylval.number.position = start_position;
 	return (NUMBER);
       }
 
@@ -4704,6 +4750,7 @@ got_token:
   the_word = (WORD_DESC *)xmalloc (sizeof (WORD_DESC));
   the_word->word = (char *)xmalloc (1 + token_index);
   the_word->flags = 0;
+  the_word->position = start_position;
   strcpy (the_word->word, token);
   if (dollar_present)
     the_word->flags |= W_HASDOLLAR;
@@ -4754,14 +4801,11 @@ got_token:
     {
     case FUNCTION:
       parser_state |= PST_ALLOWOPNBRC;
-      function_dstart = line_number;
+      function_dstart = position.line;
       break;
     case CASE:
     case SELECT:
     case FOR:
-      if (word_top < MAX_CASE_NEST)
-	word_top++;
-      word_lineno[word_top] = line_number;
       break;
     }
 
@@ -5467,7 +5511,7 @@ error_token_from_token (tok)
 	t = savestring (yylval.word->word);
       break;
     case NUMBER:
-      t = itos (yylval.number);
+      t = itos (yylval.number.value);
       break;
     case ARITH_CMD:
       if (yylval.word_list)
@@ -5538,7 +5582,7 @@ print_offending_line ()
   while (token_end && msg[token_end - 1] == '\n')
     msg[--token_end] = '\0';
 
-  parser_error (line_number, "`%s'", msg);
+  parser_error (position.line, "`%s'", msg);
   free (msg);
 }
 
@@ -5554,7 +5598,7 @@ report_syntax_error (message)
 
   if (message)
     {
-      parser_error (line_number, "%s", message);
+      parser_error (position.line, "%s", message);
       if (interactive && EOF_Reached)
 	EOF_Reached = 0;
       last_command_exit_value = parse_and_execute_level ? EX_BADSYNTAX : EX_BADUSAGE;
@@ -5572,7 +5616,7 @@ report_syntax_error (message)
 	  free (msg);
 	  msg = p;
 	}
-      parser_error (line_number, _("syntax error near unexpected token `%s'"), msg);
+      parser_error (position.line, _("syntax error near unexpected token `%s'"), msg);
       free (msg);
 
       if (interactive == 0)
@@ -5590,7 +5634,7 @@ report_syntax_error (message)
       msg = error_token_from_text ();
       if (msg)
 	{
-	  parser_error (line_number, _("syntax error near `%s'"), msg);
+	  parser_error (position.line, _("syntax error near `%s'"), msg);
 	  free (msg);
 	}
 
@@ -5601,7 +5645,7 @@ report_syntax_error (message)
   else
     {
       msg = EOF_Reached ? _("syntax error: unexpected end of file") : _("syntax error");
-      parser_error (line_number, "%s", msg);
+      parser_error (position.line, "%s", msg);
       /* When the shell is interactive, this file uses EOF_Reached
 	 only for error reporting.  Other mechanisms are used to
 	 decide whether or not to exit. */
@@ -5720,7 +5764,7 @@ parse_string_to_word_list (s, flags, whom)
   bash_history_disable ();
 #endif
 
-  orig_line_number = line_number;
+  orig_line_number = position.line;
   orig_line_count = current_command_line_count;
   orig_input_terminator = shell_input_line_terminator;
   old_echo_input = echo_input_at_read;
@@ -5745,7 +5789,7 @@ parse_string_to_word_list (s, flags, whom)
 	continue;
       if (tok != WORD && tok != ASSIGNMENT_WORD)
 	{
-	  line_number = orig_line_number + line_number - 1;
+	  position.line = orig_line_number + position.line - 1;
 	  orig_current_token = current_token;
 	  current_token = tok;
 	  yyerror (NULL);	/* does the right thing */
@@ -5799,7 +5843,7 @@ parse_compound_assignment (retlenp)
 
   saved_token = token;
   orig_token_size = token_buffer_size;
-  orig_line_number = line_number;
+  orig_line_number = position.line;
   orig_last_token = last_read_token;
 
   last_read_token = WORD;	/* WORD to allow reserved words here */

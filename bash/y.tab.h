@@ -143,20 +143,21 @@ typedef union YYSTYPE
 {
 
 /* Line 2068 of yacc.c  */
-#line 327 "./parse.y"
+#line 325 "./parse.y"
 
+  POSITION  position;
   WORD_DESC *word;		/* the word that we read. */
-  int number;			/* the number that we read. */
+  PNUMBER   number;			/* the number that we read. */
   WORD_LIST *word_list;
-  COMMAND *command;
-  REDIRECT *redirect;
-  ELEMENT element;
+  COMMAND   *command;
+  REDIRECT  *redirect;
+  ELEMENT   element;
   PATTERN_LIST *pattern;
 
 
 
 /* Line 2068 of yacc.c  */
-#line 160 "y.tab.h"
+#line 161 "y.tab.h"
 } YYSTYPE;
 # define YYSTYPE_IS_TRIVIAL 1
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */

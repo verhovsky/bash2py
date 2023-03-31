@@ -901,7 +901,7 @@ array_value_internal (s, quoted, flags, rtype, indp)
       else if (var == 0 || value_cell (var) == 0)	/* XXX - check for invisible_p(var) ? */
 	return ((char *)NULL);
       else if (array_p (var) == 0 && assoc_p (var) == 0)
-	l = add_string_to_list (value_cell (var), (WORD_LIST *)NULL);
+	l = add_string_to_list (value_cell (var), (WORD_LIST *)NULL, 0);
       else if (assoc_p (var))
 	{
 	  l = assoc_to_word_list (assoc_cell (var));
@@ -1018,7 +1018,7 @@ array_keys (s, quoted)
     return (char *)NULL;
 
   if (array_p (var) == 0 && assoc_p (var) == 0)
-    l = add_string_to_list ("0", (WORD_LIST *)NULL);
+    l = add_string_to_list ("0", (WORD_LIST *)NULL, 0);
   else if (assoc_p (var))
     l = assoc_keys_to_word_list (assoc_cell (var));
   else

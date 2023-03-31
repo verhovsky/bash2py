@@ -60,6 +60,7 @@ copy_word (w)
 
   new_word = make_bare_word (w->word);
   new_word->flags = w->flags;
+  new_word->position = w->position;
   return (new_word);
 }
 

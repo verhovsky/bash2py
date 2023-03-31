@@ -529,8 +529,8 @@ cd_to_string (name)
   WORD_LIST *dir;
   int result;
 
-  dir = make_word_list (make_word (name), NULL);
-  tlist = make_word_list (make_word ("--"), dir);
+  dir = make_word_list (make_word (name, 0), NULL);
+  tlist = make_word_list (make_word ("--", 0), dir);
   result = cd_builtin (tlist);
   dispose_words (tlist);
   return (result);
@@ -651,7 +651,7 @@ get_directory_stack (flags)
     {
       d = (flags&1) ? polite_directory_format (pushd_directory_list[i])
 		    : pushd_directory_list[i];
-      ret = make_word_list (make_word (d), ret);
+      ret = make_word_list (make_word (d, 0), ret);
     }
   /* Now the current directory. */
   d = get_working_directory ("dirstack");
@@ -672,7 +672,7 @@ get_directory_stack (flags)
       else /* t == d, so d is what we want */
 	i = 1;
     }
-  ret = make_word_list (make_word (d), ret);
+  ret = make_word_list (make_word (d, 0), ret);
   if (i)
     free (d);
   return ret;	/* was (REVERSE_LIST (ret, (WORD_LIST *)); */

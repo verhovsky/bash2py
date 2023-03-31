@@ -108,16 +108,29 @@ enum command_type { cm_for, cm_case, cm_while, cm_if, cm_simple, cm_select,
 #define SUBSHELL_COPROC	0x40	/* subshell from a coproc pipeline */
 #define SUBSHELL_RESETTRAP 0x80	/* subshell needs to reset trap strings on first call to trap */
 
+typedef struct {
+  int line;
+  int column;
+  int byte;
+} POSITION;
+
+typedef struct {
+  int      value;
+  POSITION position;
+} PNUMBER;
+
 /* A structure which represents a word. */
 typedef struct word_desc {
-  char *word;		/* Zero terminated string. */
-  int flags;		/* Flags associated with this word. */
+  char     *word;		/* Zero terminated string. */
+  int      flags;		/* Flags associated with this word. */
+  POSITION position;
 } WORD_DESC;
 
 /* A linked list of words. */
 typedef struct word_list {
   struct word_list *next;
   WORD_DESC *word;
+  POSITION position;
 } WORD_LIST;
 
 
@@ -147,6 +160,7 @@ typedef struct redirect {
   enum r_instruction  instruction; /* What to do with the information. */
   REDIRECTEE redirectee;	/* File descriptor or filename */
   char *here_doc_eof;		/* The word that appeared in <<foo. */
+  POSITION position;
 } REDIRECT;
 
 /* An element used in parsing.  A single word or a single redirection.
@@ -154,6 +168,8 @@ typedef struct redirect {
 typedef struct element {
   WORD_DESC *word;
   REDIRECT *redirect;
+  int	line;
+  POSITION position;
 } ELEMENT;
 
 /* Possible values for command->flags. */
@@ -171,12 +187,13 @@ typedef struct element {
 #define CMD_COMMAND_BUILTIN 0x0800 /* command executed by `command' builtin */
 #define CMD_COPROC_SUBSHELL 0x1000
 #define CMD_LASTPIPE	    0x2000
+#define CMD_ELIF			0x4000
 
 /* What a command looks like. */
 typedef struct command {
   enum command_type type;	/* FOR CASE WHILE IF CONNECTION or SIMPLE. */
   int flags;			/* Flags controlling execution environment. */
-  int line;			/* line number the command starts on */
+  int line;  			/* line number the command starts on */
   REDIRECT *redirects;		/* Special redirects for FOR CASE, etc. */
   union {
     struct for_com *For;
@@ -202,6 +219,7 @@ typedef struct command {
     struct subshell_com *Subshell;
     struct coproc_com *Coproc;
   } value;
+  POSITION position;
 } COMMAND;
 
 /* Structure used to represent the CONNECTION type. */
@@ -224,6 +242,7 @@ typedef struct pattern_list {
   WORD_LIST *patterns;		/* Linked list of patterns to test. */
   COMMAND *action;		/* Thing to execute if a pattern matches. */
   int flags;
+  POSITION position;
 } PATTERN_LIST;
 
 /* The CASE command. */
@@ -310,6 +329,7 @@ typedef struct cond_com {
   int type;
   WORD_DESC *op;
   struct cond_com *left, *right;
+  POSITION position;
 } COND_COM;
 
 /* The "simple" command.  Just a collection of words and redirects. */
@@ -328,6 +348,7 @@ typedef struct function_def {
   WORD_DESC *name;		/* The name of the function. */
   COMMAND *command;		/* The parsed execution tree. */
   char *source_file;		/* file in which function was defined, if any */
+  POSITION position;
 } FUNCTION_DEF;
 
 /* A command that is `grouped' allows pipes and redirections to affect all

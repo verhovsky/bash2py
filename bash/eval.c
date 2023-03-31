@@ -56,7 +56,7 @@ extern int posixly_correct;
 extern int subshell_environment, running_under_emacs;
 extern int last_command_exit_value, stdin_redir;
 extern int need_here_doc;
-extern int current_command_number, current_command_line_count, line_number;
+extern int current_command_number, current_command_line_count;
 extern int expand_aliases;
 extern int token_cnt;
 

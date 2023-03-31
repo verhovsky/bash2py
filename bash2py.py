@@ -22,7 +22,7 @@ def main():
 
 	if (option == '-f'):
 		translate(bashFileName)
-		exit
+		exit(0)
 		
 	if(option == '-d'):
 		for dirname, subDirs, files in os.walk(bashFileName):
@@ -30,7 +30,7 @@ def main():
 				if not f.endswith(".py"):
 					bashFileName1 = os.path.join(dirname, f)
 					translate(bashFileName1)
-		exit
+		exit(0)
 
 	helpx()
 

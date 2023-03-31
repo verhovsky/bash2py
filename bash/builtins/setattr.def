@@ -230,7 +230,7 @@ set_or_show_attributes (list, attribute, nodefs)
 		{
 		  tlist = list->next;
 		  list->next = (WORD_LIST *)NULL;
-		  w = arrays_only ? make_word ("-ra") : make_word ("-rA");
+		  w = arrays_only ? make_word ("-ra", 0) : make_word ("-rA", 0);
 		  nlist = make_word_list (w, list);
 		  opt = declare_builtin (nlist);
 		  if (opt != EXECUTION_SUCCESS)

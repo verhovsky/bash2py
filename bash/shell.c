@@ -1340,7 +1340,7 @@ bind_args (argv, arg_start, arg_end, start_index)
   WORD_LIST *args;
 
   for (i = arg_start, args = (WORD_LIST *)NULL; i < arg_end; i++)
-    args = make_word_list (make_word (argv[i]), args);
+    args = make_word_list (make_word (argv[i], 0), args);
   if (args)
     {
       args = REVERSE_LIST (args, WORD_LIST *);
