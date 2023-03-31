@@ -115,7 +115,7 @@ extern char *this_command_name;
    call shell_reinitialize () if you need to start afresh. */
 int shell_initialized = 0;
 
-int g_translate_html = 0;
+extern int g_translate_html;
 
 COMMAND *global_command = (COMMAND *)NULL;
 

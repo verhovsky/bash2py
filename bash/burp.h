@@ -9,6 +9,7 @@ typedef struct {
 } burpT;
 
 void burp_init(burpT *burpP);
+char *burp_extend(burpT *burpP, char *P, int need);
 void burp(burpT *burpP, const char *fmtP, ...);
 void burpc(burpT *burpP, const char c);
 void burp_ungetc(burpT *burpP);

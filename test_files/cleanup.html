@@ -21,11 +21,11 @@
 os.chdir("/var/log")</pre></td></tr>
 <tr><td><pre>cat /dev/null &gt; messages
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>_rc = subprocess.Popen("cat" + " " + "/dev/null",shell=True,stdout=file('messages','wb'))
+<tr><td></td><td><pre>_rc = subprocess.call("cat /dev/null",shell=True,stdout=file('messages','wb'))
 </pre></td></tr>
 <tr><td><pre>cat /dev/null &gt; wtmp
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>_rc = subprocess.Popen("cat" + " " + "/dev/null",shell=True,stdout=file('wtmp','wb'))
+<tr><td></td><td><pre>_rc = subprocess.call("cat /dev/null",shell=True,stdout=file('wtmp','wb'))
 </pre></td></tr>
 <tr><td><pre>echo "Log files cleaned up."
 </pre></td><td></td></tr>

@@ -58,7 +58,7 @@ then
 fi
 done
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>while (i == "y" ):
+<tr><td></td><td><pre>while (i == ""y"" ):
     print("1.Addition")
     print("2.Subtraction")
     print("3.Multiplication")
@@ -66,23 +66,23 @@ done
     print("Enter your choice")
     ch = raw_input()
     
-    if ( str(ch) == '1'):
-        sum=os.popen("expr "+str(n1)+" + "+str(n2)).read()
-        print("Sum = "+str(sum))
-    elif ( str(ch) == '2'):
+    if ( ch == '1'):
+        sum=os.popen("expr "+str(n1)++str(n2)).read()
+        print("Sum = " + str(sum))
+    elif ( ch == '2'):
         sum=os.popen("expr "+str(n1)+" - "+str(n2)).read()
-        print("Sub = "+str(sum))
-    elif ( str(ch) == '3'):
+        print("Sub = " + str(sum))
+    elif ( ch == '3'):
         sum=os.popen("expr "+str(n1)+" * "+str(n2)).read()
-        print("Mul = "+str(sum))
-    elif ( str(ch) == '4'):
+        print("Mul = " + str(sum))
+    elif ( ch == '4'):
         sum=os.popen("expr "+str(n1)+" / "+str(n2)).read()
-        print("Div = "+str(sum))
+        print("Div = " + str(sum))
     else:
         print("Invalid choice")
     print("Do u want to continue (y/n)) ?")
     i = raw_input()
-    if (i != "y"  ):
+    if (i != ""y""  ):
         exit()</pre></td></tr>
 <tr><td><pre>ÿ</pre></td><td></td></tr>
 </body>

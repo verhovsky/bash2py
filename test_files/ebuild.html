@@ -68,16 +68,16 @@ fi
     global A
 
     #make sure we're in the right directory </pre></td></tr><tr><td></td><td><pre>
-    os.chdir(str(ORIGDIR))
-    if (S_ISDIR(os.stat(str(WORKDIR) ).st_mode) ):
-        _rc = subprocess.call(["rm","-rf",str(WORKDIR)])
-    _rc = subprocess.call(["mkdir",str(WORKDIR)])
-    os.chdir(str(WORKDIR))
-    if ( not os.path.isfile(str(DISTDIR)+"/"+str(A) ) ):
-        print(str(DISTDIR)+"/"+str(A)+" does not exist.  Please download first.")
+    os.chdir(ORIGDIR)
+    if (S_ISDIR(os.stat(WORKDIR ).st_mode) ):
+        _rc = subprocess.call(["rm","-rf",WORKDIR])
+    _rc = subprocess.call(["mkdir",WORKDIR])
+    os.chdir(WORKDIR)
+    if ( not os.path.isfile(str(DISTDIR) + "/" + str(A) ) ):
+        print(str(DISTDIR) + "/" + str(A) + " does not exist.  Please download first.")
         exit(1)
-    _rc = subprocess.call(["tar","xzf",str(DISTDIR)+"/"+str(A)])
-    print("Unpacked "+str(DISTDIR)+"/"+str(A)+".")
+    _rc = subprocess.call(["tar","xzf",str(DISTDIR) + "/" + str(A)])
+    print("Unpacked " + str(DISTDIR) + "/" + str(A) + ".")
 </pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
@@ -100,9 +100,9 @@ def user_compile () :
     #we're already in ${SRCDIR}</pre></td></tr><tr><td></td><td><pre>
     if (os.path.isfile("configure" ) ):
         #run configure script if it exists</pre></td></tr><tr><td></td><td><pre>
-        _rc = subprocess.call(["./configure","--prefix=/usr"])
+        _rc = subprocess.call(["./configure","--prefix"="/usr"])
     #run make</pre></td></tr><tr><td></td><td><pre>
-    _rc = subprocess.call(["make",str(MAKEOPTS),MAKE="make "+str(MAKEOPTS)])
+    _rc = subprocess.call(["make",MAKEOPTS,MAKE="make " + str(MAKEOPTS)])
 </pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
@@ -121,10 +121,10 @@ def user_compile () :
     global SRCDIR
 
     if ( not S_ISDIR(os.stat(str(SRCDIR) ).st_mode) ):
-        print(str(SRCDIR)+" does not exist -- please unpack first.")
+        print(str(SRCDIR) + " does not exist -- please unpack first.")
         exit(1)
     #make sure we're in the right directory  </pre></td></tr><tr><td></td><td><pre>
-    os.chdir(str(SRCDIR))
+    os.chdir(SRCDIR)
     user_compile()
 </pre></td></tr>
 <tr><td><pre>
@@ -134,7 +134,7 @@ def user_compile () :
 <tr><td></td><td><pre>os.environ['ORIGDIR'] = os.popen("pwd").read()</pre></td></tr>
 <tr><td><pre>export WORKDIR=${ORIGDIR}/work
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>os.environ['WORKDIR'] = str(ORIGDIR)+"/work"</pre></td></tr>
+<tr><td></td><td><pre>os.environ['WORKDIR'] = str(ORIGDIR) + "/work"</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>if [ -e "$1" ]
@@ -146,15 +146,15 @@ else
 fi
 </pre></td><td></td></tr>
 <tr><td></td><td><pre>if (os.path.isfile(str(sys.argv[1]) ) ):
-    _rc = subprocess.call(["source",str(sys.argv[1])])
+    _rc = subprocess.call(["source",sys.argv[1]])
 else:
-    print("Ebuild file "+str(sys.argv[1])+" not found.")
+    print("Ebuild file " + str(sys.argv[1]) + " not found.")
     exit(1)</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>export SRCDIR=${WORKDIR}/${P}
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>os.environ['SRCDIR'] = str(WORKDIR)+"/"+str(P)</pre></td></tr>
+<tr><td></td><td><pre>os.environ['SRCDIR'] = str(WORKDIR) + "/" + str(P)</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>case "${2}" in

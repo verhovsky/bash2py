@@ -83,7 +83,7 @@ void
 show_shell_version (extended)
      int extended;
 {
-  printf("bash2py version 2.0 " __DATE__ " " __TIME__ "\n");
+  printf("bash2py version 2.3 " __DATE__ " " __TIME__ "\n");
   printf (_("Hacked from GNU bash %s (%s)\n"), shell_version_string (), MACHTYPE);
   if (extended)
     {

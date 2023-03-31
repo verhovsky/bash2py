@@ -64,13 +64,13 @@ done
     SCORE = raw_input()
     if ("$SCORE" &lt; "0" or "$SCORE" &gt; "100" ):
         print("Be serious.  Common, try again: ")
-    elif (SCORE == "q"  ):
-        print("Average rating: "+str(AVERAGE)+"%.")
+    elif ("SCORE" == ""q""  ):
+        print("Average rating: " + str(AVERAGE) + "%.")
         break
     else:
-        SUM=str([$SUM + $SCORE])
-        NUM=str([$NUM + 1])
-        AVERAGE=str([$SUM / $NUM])</pre></td></tr>
+        SUM=[SUM +" SCORE]
+        NUM=[NUM +" 1]
+        AVERAGE=[SUM /" NUM]</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>echo "Exiting."
@@ -93,11 +93,11 @@ done
 os.chdir("/var/log")</pre></td></tr>
 <tr><td><pre>cat /dev/null &gt; messages
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>_rc = subprocess.Popen("cat" + " " + "/dev/null",shell=True,stdout=file('messages','wb'))
+<tr><td></td><td><pre>_rc = subprocess.call("cat /dev/null",shell=True,stdout=file('messages','wb'))
 </pre></td></tr>
 <tr><td><pre>cat /dev/null &gt; wtmp
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>_rc = subprocess.Popen("cat" + " " + "/dev/null",shell=True,stdout=file('wtmp','wb'))
+<tr><td></td><td><pre>_rc = subprocess.call("cat /dev/null",shell=True,stdout=file('wtmp','wb'))
 </pre></td></tr>
 <tr><td><pre>echo "Log files cleaned up."
 </pre></td><td></td></tr>
@@ -109,8 +109,8 @@ os.chdir("/var/log")</pre></td></tr>
 <tr><td></td><td><pre>Msg=os.popen("printf \"%s %s n\" "+str(Message1)+" "+str(Message2)).read()</pre></td></tr>
 <tr><td><pre>echo $Msg; echo $Msg
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>print(str(Msg))
-print(str(Msg))</pre></td></tr>
+<tr><td></td><td><pre>print(Msg)
+print(Msg)</pre></td></tr>
 <tr><td><pre>ÿ</pre></td><td></td></tr>
 </body>
 </html>

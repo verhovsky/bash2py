@@ -20,7 +20,8 @@
 yes="y"</pre></td></tr>
 <tr><td><pre>declare -a devices
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>_rc = subprocess.call(["declare",and,"devices"])</pre></td></tr>
+<tr><td></td><td><pre>devices=""
+</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>testscript="RAID/JBOD SCSI file test script - rev A"
@@ -28,7 +29,7 @@ yes="y"</pre></td></tr>
 <tr><td></td><td><pre>testscript="RAID/JBOD SCSI file test script - rev A"</pre></td></tr>
 <tr><td><pre>echo $testscript
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>print(str(testscript))</pre></td></tr>
+<tr><td></td><td><pre>print(testscript)</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>echo "WOULD YOU LIKE TO INSTALL NAC DRIVER (enter y for yes n for no) THEN ENTER"
@@ -146,19 +147,19 @@ fi
 <tr><td></td><td><pre>if (filetest == yes  ):
     print("SPECIFY FILE SIZE TO TEST (100 = 100Mbyte) THEN ENTER")
     filesize = raw_input()
-    print("files size to create is "+str(filesize)+" Mbyte")
+    print("files size to create is " + str(filesize) + " Mbyte")
     print("WOULD YOU LIKE TO COPY A FILE FROM HOST TO STORAGE (enter y for yes n for no) THEN ENTER")
     filecopy = raw_input()
     print("WOULD YOU LIKE TO DELETE THE FILE FROM STORAGE WHEN TESTING IS COMPLETE (enter y for yes n for no) THEN ENTER")
     filedelete = raw_input()
     # ****** GET STORAGE DEVICES TO WRITE FILE ******</pre></td></tr><tr><td></td><td><pre>
     print("ENTER STORAGE DEVICE NAMES TO RUN THE FILE TEST ON ONE LINE (ex:sda1 sdb5 sdd6) THEN ENTER")
-    -a = raw_input()
-    devicecount=str(len(sys.argv))
+    devices = raw_input()
+    devicecount=len(sys.argv)
     index=0
-    while (index &lt; devicecount ):
-        print(str(devices[$index]))
-        "index = "+str(index)+" +1"
+    while ("index" &lt; "devicecount" ):
+        print(devices[index])
+        "index" = index +1"
     # **** clear out test1.txt file ****</pre></td></tr><tr><td></td><td><pre>
     _rc = subprocess.call(["cp","zero.txt","test2.txt"])
     # **** create file of size filesize use testbase.txt to generate</pre></td></tr><tr><td></td><td><pre>
@@ -166,48 +167,48 @@ fi
     print("creating test file... this takes a couple of minutes")
     while (filesize &gt; 0 ):
         _rc = subprocess.call(["cat"])
-        _rc = subprocess.Popen("testbase2.txt",shell=True,stdout=file('/home/root/DDC/latest/FC7901xS1/ddk/applications/test2.txt','ab'))
+        _rc = subprocess.call("testbase2.txt",shell=True,stdout=file('/home/root/DDC/latest/FC7901xS1/ddk/applications/test2.txt','ab'))
         
-        filesize=(filesize-1)
+        filesize=(\"filesize-1\")
     print("test file test2.txt is created")
     # **** copy file to RAID or JBOD?  ********</pre></td></tr><tr><td></td><td><pre>
     if (filecopy == yes  ):
         # **** mount storage copy file then sync and compare files</pre></td></tr><tr><td></td><td><pre>
         index=0
-        while (index &lt; devicecount ):
-            print("mounting "+str(devices[$index]))
+        while ("index" &lt; "devicecount" ):
+            print("mounting " + str(devices[index]))
             print("mounting
-            "+str(devices[$index]))
-            _rc = subprocess.call(["mount","-t","ext2","-v","/dev/"+str(devices[$index])])
-            _rc = subprocess.Popen("/new_root",shell=True,stdout=file('/home/root/DDC/latest/FC7901xS1/ddk/applications/filetest.txt','ab'))
+            " + str(devices[index]))
+            _rc = subprocess.call(["mount","-t","ext2","-v","/dev/" + str(devices[index])])
+            _rc = subprocess.call("/new_root",shell=True,stdout=file('/home/root/DDC/latest/FC7901xS1/ddk/applications/filetest.txt','ab'))
             
-            print("copying test file to "+str(devices[$index]))
+            print("copying test file to " + str(devices[index]))
             _rc = subprocess.call(["cp","test2.txt","/new_root"])
             print("sync disks")
             _rc = subprocess.call(["sync"])
             print("comparing files now (no output if files are the same)")
             _rc = subprocess.call(["cmp","-l","test2.txt","/new_root/test2.txt"])
-            print("COMPARE COMPLETE for "+str(devices[$index]))
-            print("unmount "+str(devices[$index]))
+            print("COMPARE COMPLETE for " + str(devices[index]))
+            print("unmount " + str(devices[index]))
             _rc = subprocess.call(["umount","-v","/new_root"])
-            "index = "+str(index)+" + 1"
+            "index" = index +" 1
     print("***** FILE TEST COMPLETE *****")
     # **** delete file from RAID or JBOD? *******</pre></td></tr><tr><td></td><td><pre>
     if (filedelete == yes  ):
         index=0
-        while (index &lt; devicecount ):
-            print("mounting "+str(devices[$index]))
+        while ("index" &lt; "devicecount" ):
+            print("mounting " + str(devices[index]))
             print("mounting
-            "+str(devices[$index]))
-            _rc = subprocess.call(["mount","-t","ext2","-v","/dev/"+str(devices[$index])])
-            _rc = subprocess.Popen("/new_root",shell=True,stdout=file('/home/root/DDC/latest/FC7901xS1/ddk/applications/filetest.txt','ab'))
+            " + str(devices[index]))
+            _rc = subprocess.call(["mount","-t","ext2","-v","/dev/" + str(devices[index])])
+            _rc = subprocess.call("/new_root",shell=True,stdout=file('/home/root/DDC/latest/FC7901xS1/ddk/applications/filetest.txt','ab'))
             
-            print("deleting file test2.txt from "+str(devices[$index]))
+            print("deleting file test2.txt from " + str(devices[index]))
             _rc = subprocess.call(["rm","/new_root/test2.txt"])
-            print("test2.txt is now removed from "+str(devices[$index]))
-            print("unmount "+str(devices[$index]))
+            print("test2.txt is now removed from " + str(devices[index]))
+            print("unmount " + str(devices[index]))
             _rc = subprocess.call(["umount","-v","/new_root"])
-            "index = "+str(index)+" + 1"</pre></td></tr>
+            "index" = index +" 1</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>ÿ</pre></td><td></td></tr>

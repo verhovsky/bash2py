@@ -10,7 +10,7 @@
 </pre></td><td></td></tr>
 <tr><td><pre>FILE=$1
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>FILE=str(sys.argv[1])</pre></td></tr>
+<tr><td></td><td><pre>FILE=sys.argv[1]</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>if [ -f $FILE ];
@@ -20,10 +20,10 @@ else
    echo "File $FILE does not exist."
 fi
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>if ((os.path.isfile(str(FILE) ) and S_ISREG(os.stat(str(FILE) ).st_mode)) ):
-    print("File "+str(FILE)+" exists.")
+<tr><td></td><td><pre>if ((os.path.isfile(FILE ) and S_ISREG(os.stat(FILE ).st_mode)) ):
+    print("File " + str(FILE) + " exists.")
 else:
-    print("File "+str(FILE)+" does not exist.")</pre></td></tr>
+    print("File " + str(FILE) + " does not exist.")</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>if [ -b $FILE ];
@@ -33,8 +33,8 @@ else
     echo "Not a block-special file"
 fi
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>if (S_ISBLK(os.stat(str(FILE) ).st_mode) ):
-    print("File "+str(FILE)+" exists and is a block-special file.")
+<tr><td></td><td><pre>if (S_ISBLK(os.stat(FILE ).st_mode) ):
+    print("File " + str(FILE) + " exists and is a block-special file.")
 else:
     print("Not a block-special file")</pre></td></tr>
 <tr><td><pre>ÿ</pre></td><td></td></tr>

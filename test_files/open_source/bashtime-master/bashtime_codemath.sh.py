@@ -19,18 +19,18 @@ from stat import *
 # IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 # if no args
-if (('" ".join(sys.argv[1:])' not in globals()) ):
+if (('str(" ".join(sys.argv[1:]))' not in globals()) ):
     # get the date as "hours(12) minutes" in a single call
     # make a bash array with it
-    d=(os.popen("date \\\"+%I %M\\\"").read()+)
+    d=(os.popen("date \"+%I %M\"").read())
     # separate hours and minutes
-    hour=str(d[0]#0)
+    hour=d[0]#0
     # remove leading 0 or values <10 will be interpreted as octal
-    min=str(d[1]#0)
+    min=d[1]#0
 else:
     # get the arguments passed to the script
-    hour=str(sys.argv[1])
-    min=str(sys.argv[2])
+    hour=sys.argv[1]
+    min=sys.argv[2]
 # The targeted unicode characters are the "CLOCK FACE" ones
 # They are located in the codepages between:
 #     U+1F550 (ONE OCLOCK) and U+1F55B (TWELVE OCLOCK), for the plain hours
@@ -51,19 +51,19 @@ else:
 # We thus add 0 (plain hour) or 12 (half).
 # Then we add 144, which is the first index (as an integer).
 # (0 … 16 … 31 … 46 …) -> (0 1 2 3)
-a=os.popen("echo "+($min/15)).read()
+a=os.popen("echo "+str((min/15))).read()
 # (0 1 2 3) -> (0 1 1 2)
-i=os.popen("echo "+str(a)+" | awk '{ print "+str(sys.argv[1])+"/1.5 }' OFMT=\\\"%.0f\\\"").read()
+i=os.popen("echo "+str(a)+" | awk \"{ print \\"+str(sys.argv[1])+"/1.5 }\" OFMT=\"%.0f\"").read()
 # (0 1 1 2) -> (0 12 12 -1)
-j=( ( (i*12+1)%25 )-1 )
+j=( ( (\"i\"*\"12+1\")%25 )-1 )
 # (0 12 12 -1) -> (0 12 12 1)
-k=str(j#-)
+k=j#-
 # start from the first code
-mi=(144+$k)
+mi=(\"144+k\")
 # Add the computed minutes index (144 or 156) minus 1 (because the first hour starts at 0).
-hi=($mi+$hour-1)
+hi=(\"mi+hour-1\")
 # Get the hexadecimal representation of this integer
-hex=os.popen("printf \\\"%x\\\" "+str(hi)).read()
+hex=os.popen("printf \"%x\" "+str(hi)).read()
 # Print the first three bytes (that are always the same) and the computed last one.
-print( "\xf0\x9f\x95\x"+str(hex) )
+print( "\xf0\x9f\x95\x" + str(hex) )
 

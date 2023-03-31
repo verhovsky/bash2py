@@ -7,7 +7,7 @@
 <tr><td></td><td>from stat import *</td></tr>
 <tr><td><pre>echo 'Which fruit do you like most?'
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>print(r'Which fruit do you like most?')</pre></td></tr>
+<tr><td></td><td><pre>print("Which fruit do you like most?")</pre></td></tr>
 <tr><td><pre>read fruit
 </pre></td><td></td></tr>
 <tr><td></td><td><pre>fruit = raw_input()</pre></td></tr>
@@ -29,12 +29,12 @@
 esac
 </pre></td><td></td></tr>
 <tr><td></td><td><pre>
-if ( str(fruit) == 'apple'):
-    print(r'Mmmmh... I like those!')
-elif ( str(fruit) == 'banana'):
-    print(r'Hm, a bit awry, no?')
-elif ( str(fruit) == 'orange' or str(fruit) == 'tangerine'):
-    print(r'Eeeks! I dont like those! Go away!')
+if ( fruit == 'apple'):
+    print("Mmmmh... I like those!")
+elif ( fruit == 'banana'):
+    print("Hm, a bit awry, no?")
+elif ( fruit == 'orange' or fruit == 'tangerine'):
+    print("Eeeks! I dont like those! Go away!")
     exit(1)
 else:
     print("Unknown fruit - sure it isn't toxic?")</pre></td></tr>

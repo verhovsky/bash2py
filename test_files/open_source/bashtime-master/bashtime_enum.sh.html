@@ -80,15 +80,15 @@ fi
 # IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN</pre></td></tr><tr><td></td><td><pre>
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.</pre></td></tr><tr><td></td><td><pre>
 # if no args</pre></td></tr><tr><td></td><td><pre>
-if (('" ".join(sys.argv[1:])' not in globals()) ):
+if (('str(" ".join(sys.argv[1:]))' not in globals()) ):
     # get the date as "hours(12) minutes" in a single call</pre></td></tr><tr><td></td><td><pre>
     # make a bash array with it</pre></td></tr><tr><td></td><td><pre>
-    time=os.popen("date \\\"+%I%M\\\"").read()
+    time=os.popen("date \"+%I%M\"").read()
 else:
     # get the arguments passed to the script</pre></td></tr><tr><td></td><td><pre>
-    hour=str(sys.argv[1])
-    min=str(sys.argv[2])
-    time=str(hour)+""+str(min)</pre></td></tr>
+    hour=sys.argv[1]
+    min=sys.argv[2]
+    time=str(hour) + str(min)</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>if [ "$time" -lt 115 ]
@@ -167,56 +167,56 @@ else
     echo -n '⭕'
 fi
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>if (time &lt; 115  ):
-    print(r'🕐')
-elif (time &lt; 145  ):
-    print(r'🕜')
-elif (time &lt; 215  ):
-    print(r'🕑')
-elif (time &lt; 245  ):
-    print(r'🕝')
-elif (time &lt; 315  ):
-    print(r'🕒')
-elif (time &lt; 345  ):
-    print(r'🕞')
-elif (time &lt; 415  ):
-    print(r'🕓')
-elif (time &lt; 445  ):
-    print(r'🕟')
-elif (time &lt; 515  ):
-    print(r'🕔')
-elif (time &lt; 545  ):
-    print(r'🕠')
-elif (time &lt; 615  ):
-    print(r'🕕')
-elif (time &lt; 645  ):
-    print(r'🕡')
-elif (time &lt; 715  ):
-    print(r'🕖')
-elif (time &lt; 745  ):
-    print(r'🕢')
-elif (time &lt; 815  ):
-    print(r'🕗')
-elif (time &lt; 845  ):
-    print(r'🕣')
-elif (time &lt; 915  ):
-    print(r'🕘')
-elif (time &lt; 945  ):
-    print(r'🕤')
-elif (time &lt; 1015  ):
-    print(r'🕙')
-elif (time &lt; 1045  ):
-    print(r'🕥')
-elif (time &lt; 1115  ):
-    print(r'🕚')
-elif (time &lt; 1145  ):
-    print(r'🕦')
-elif (time &lt; 1215  ):
-    print(r'🕛')
-elif (time &lt; 1300  ):
-    print(r'🕛')
+<tr><td></td><td><pre>if ("time" &lt; 115  ):
+    print("\xf0\x9f\x95\x90")
+elif ("time" &lt; 145  ):
+    print("\xf0\x9f\x95\x9c")
+elif ("time" &lt; 215  ):
+    print("\xf0\x9f\x95\x91")
+elif ("time" &lt; 245  ):
+    print("\xf0\x9f\x95\x9d")
+elif ("time" &lt; 315  ):
+    print("\xf0\x9f\x95\x92")
+elif ("time" &lt; 345  ):
+    print("\xf0\x9f\x95\x9e")
+elif ("time" &lt; 415  ):
+    print("\xf0\x9f\x95\x93")
+elif ("time" &lt; 445  ):
+    print("\xf0\x9f\x95\x9f")
+elif ("time" &lt; 515  ):
+    print("\xf0\x9f\x95\x94")
+elif ("time" &lt; 545  ):
+    print("\xf0\x9f\x95\xa0")
+elif ("time" &lt; 615  ):
+    print("\xf0\x9f\x95\x95")
+elif ("time" &lt; 645  ):
+    print("\xf0\x9f\x95\xa1")
+elif ("time" &lt; 715  ):
+    print("\xf0\x9f\x95\x96")
+elif ("time" &lt; 745  ):
+    print("\xf0\x9f\x95\xa2")
+elif ("time" &lt; 815  ):
+    print("\xf0\x9f\x95\x97")
+elif ("time" &lt; 845  ):
+    print("\xf0\x9f\x95\xa3")
+elif ("time" &lt; 915  ):
+    print("\xf0\x9f\x95\x98")
+elif ("time" &lt; 945  ):
+    print("\xf0\x9f\x95\xa4")
+elif ("time" &lt; 1015  ):
+    print("\xf0\x9f\x95\x99")
+elif ("time" &lt; 1045  ):
+    print("\xf0\x9f\x95\xa5")
+elif ("time" &lt; 1115  ):
+    print("\xf0\x9f\x95\x9a")
+elif ("time" &lt; 1145  ):
+    print("\xf0\x9f\x95\xa6")
+elif ("time" &lt; 1215  ):
+    print("\xf0\x9f\x95\x9b")
+elif ("time" &lt; 1300  ):
+    print("\xf0\x9f\x95\x9b")
 else:
-    print(r'⭕')</pre></td></tr>
+    print("\xe2\xad\x95")</pre></td></tr>
 <tr><td><pre>�</pre></td><td></td></tr>
 </body>
 </html>

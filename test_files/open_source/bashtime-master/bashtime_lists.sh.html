@@ -26,18 +26,18 @@ else
 fi
 </pre></td><td></td></tr>
 <tr><td></td><td><pre># if no args</pre></td></tr><tr><td></td><td><pre>
-if (('" ".join(sys.argv[1:])' not in globals()) ):
+if (('str(" ".join(sys.argv[1:]))' not in globals()) ):
     # get the date as "hours(12) minutes" in a single call</pre></td></tr><tr><td></td><td><pre>
     # make a bash array with it</pre></td></tr><tr><td></td><td><pre>
-    d=(os.popen("date \\\"+%I %M\\\"").read()+)
+    d=(os.popen("date \"+%I %M\"").read())
     # separate hours and minutes</pre></td></tr><tr><td></td><td><pre>
-    hour=str(d[0]#0)
+    hour=d[0]#0
     # remove leading 0 or values &lt;10 will be interpreted as octal</pre></td></tr><tr><td></td><td><pre>
-    min=str(d[1]#0)
+    min=d[1]#0
 else:
     # get the arguments passed to the script</pre></td></tr><tr><td></td><td><pre>
-    hour=str(sys.argv[1])
-    min=str(sys.argv[2])</pre></td></tr>
+    hour=sys.argv[1]
+    min=sys.argv[2]</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>plain=(🕐 🕑 🕒 🕓 🕔 🕕 🕖 🕗 🕘 🕙 🕚 🕛 )
@@ -53,7 +53,7 @@ else:
 <tr><td><pre>hi=$((hour-1))
 </pre></td><td></td></tr>
 <tr><td></td><td><pre># array index starts at 0</pre></td></tr><tr><td></td><td><pre>
-hi=(hour-1)</pre></td></tr>
+hi=(\"hour-1\")</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>if [[ $min -lt 15 ]] ; then
@@ -65,11 +65,11 @@ else
 fi
 </pre></td><td></td></tr>
 <tr><td></td><td><pre>if (min &lt; 15 ):
-    print(str(plain[$hi]))
+    print(plain[hi])
 elif (min &lt; 45 ):
-    print(str(half[$hi]))
+    print(half[hi])
 else:
-    print(str(plain[$((hi+1))]))</pre></td></tr>
+    print(plain[(hi+1)])</pre></td></tr>
 <tr><td><pre>�</pre></td><td></td></tr>
 </body>
 </html>

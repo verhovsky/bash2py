@@ -21,7 +21,7 @@
 
 #include "burp.h"
 
-extern int g_translate_html;
+int g_translate_html = 0;
 
 void
 burp_init(burpT *burpP)
@@ -63,6 +63,25 @@ increase_burp(burpT *burpP)
 	burpP->m_max = max;
 }
 
+char *
+burp_extend(burpT *burpP, char *P, int need)
+{
+	int	at, lth;
+	
+	lth = burpP->m_lth;
+	at  = P - burpP->m_P;
+	assert(0 <= at && at <= lth);
+	while ((burpP->m_max - lth) < need+2) {
+		increase_burp(burpP);
+	}
+	P = burpP->m_P + at;
+	memmove(P+need, P, lth - at);
+	lth          += need;
+	burpP->m_lth  = lth;
+	burpP->m_P[lth] = 0;
+	return P;
+}
+	
 void
 burpc1(burpT *burpP, const char c)
 {

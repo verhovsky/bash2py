@@ -4,7 +4,7 @@
 <tr><td></td><td>
 #! /usr/bin/env python
 </td></tr>
-<tr><td></td><td>import os,subprocess</td></tr>
+<tr><td></td><td>import os</td></tr>
 <tr><td></td><td>from stat import *</td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
@@ -17,11 +17,13 @@
 <tr><td><pre>declare -r PI=3.14159265358979     # Read-only variable, i.e., a constant.
 </pre></td><td></td></tr>
 <tr><td></td><td><pre># printf demo</pre></td></tr><tr><td></td><td><pre>
-_rc = subprocess.call(["declare","-r",PI="3.14159265358979"])</pre></td></tr>
+PI=3.14159265358979
+</pre></td></tr>
 <tr><td><pre>declare -r DecimalConstant=31373
 </pre></td><td></td></tr>
 <tr><td></td><td><pre># Read-only variable, i.e., a constant.</pre></td></tr><tr><td></td><td><pre>
-_rc = subprocess.call(["declare","-r",DecimalConstant=31373])</pre></td></tr>
+DecimalConstant=31373
+</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>Message1="Greetings,"
@@ -39,14 +41,14 @@ _rc = subprocess.call(["declare","-r",DecimalConstant=31373])</pre></td></tr>
 </pre></td><td></td></tr>
 <tr><td><pre>printf "Pi to 2 decimal places = %1.2f" $PI
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>print( "Pi to 2 decimal places = %1.2f" % (str(PI)) )
+<tr><td></td><td><pre>print( "Pi to 2 decimal places = %1.2f" % (PI) )
 </pre></td></tr>
 <tr><td><pre>echo
 </pre></td><td></td></tr>
 <tr><td></td><td><pre>print()</pre></td></tr>
 <tr><td><pre>printf "Pi to 9 decimal places = %1.9f" $PI  # It even rounds off correctly.
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>print( "Pi to 9 decimal places = %1.9f" % (str(PI)) )
+<tr><td></td><td><pre>print( "Pi to 9 decimal places = %1.9f" % (PI) )
 </pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
@@ -63,14 +65,14 @@ print( "\n" )
 </pre></td><td></td></tr>
 <tr><td></td><td><pre># Prints a line feed,</pre></td></tr><tr><td></td><td><pre>
 # Equivalent to 'echo' . . .</pre></td></tr><tr><td></td><td><pre>
-print( "Constant = \t%d\n" % (str(DecimalConstant)) )
+print( "Constant = \t%d\n" % (DecimalConstant) )
 </pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>printf "%s %s \n" $Message1 $Message2
 </pre></td><td></td></tr>
 <tr><td></td><td><pre># Inserts tab (\t).</pre></td></tr><tr><td></td><td><pre>
-print( "%s %s \n" % (str(Message1), str(Message2)) )
+print( "%s %s \n" % (Message1, Message2) )
 </pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
@@ -97,10 +99,10 @@ print()</pre></td></tr>
 </pre></td><td></td></tr>
 <tr><td><pre>Pi12=$(printf "%1.12f" $PI)
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>Pi12=os.popen("printf \\\"%1.12f\\\" "+str(PI)).read()</pre></td></tr>
+<tr><td></td><td><pre>Pi12=os.popen("printf \"%1.12f\" "+str(PI)).read()</pre></td></tr>
 <tr><td><pre>echo "Pi to 12 decimal places = $Pi12"      # Roundoff error!
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>print("Pi to 12 decimal places = "+str(Pi12))</pre></td></tr>
+<tr><td></td><td><pre>print("Pi to 12 decimal places = " + str(Pi12))</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>Msg=`printf "%s %s \n" $Message1 $Message2`
@@ -109,8 +111,8 @@ print()</pre></td></tr>
 Msg=os.popen("printf \"%s %s n\" "+str(Message1)+" "+str(Message2)).read()</pre></td></tr>
 <tr><td><pre>echo $Msg; echo $Msg
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>print(str(Msg))
-print(str(Msg))</pre></td></tr>
+<tr><td></td><td><pre>print(Msg)
+print(Msg)</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>#  As it happens, the 'sprintf' function can now be accessed

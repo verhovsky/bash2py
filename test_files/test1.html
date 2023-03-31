@@ -28,11 +28,12 @@ echo $VAR
     #Define bash local variable</pre></td></tr><tr><td></td><td><pre>
     #This variable is local to bash function only</pre></td></tr><tr><td></td><td><pre>
     VAR="local variable"
-    print(str(VAR))
+    
+    print(VAR)
 </pre></td></tr>
 <tr><td><pre>echo $VAR
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>print(str(VAR))</pre></td></tr>
+<tr><td></td><td><pre>print(VAR)</pre></td></tr>
 <tr><td><pre>bash
 </pre></td><td></td></tr>
 <tr><td></td><td><pre>bash()</pre></td></tr>
@@ -44,7 +45,7 @@ echo $VAR
 </pre></td><td></td></tr>
 <tr><td></td><td><pre># Note the bash global variable did not change</pre></td></tr><tr><td></td><td><pre>
 # "local" is bash reserved word</pre></td></tr><tr><td></td><td><pre>
-print(str(VAR))</pre></td></tr>
+print(VAR)</pre></td></tr>
 <tr><td><pre>ÿ</pre></td><td></td></tr>
 </body>
 </html>

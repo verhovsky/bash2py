@@ -133,7 +133,7 @@ static char indirection_string[100];
 extern int   g_translate_html;
 static FILE* outputF;
 
-static char* case_var;
+static burpT case_var = {0,0,0};
 static int first_if = 1;
 //MIW var declarations end
 
@@ -181,6 +181,9 @@ seen_global(const char *nameP, int local)
 	int	 c;
 
 	if (capture_globals) {
+		if (!*nameP) {
+			return;
+		}
 		for (P1 = nameP; (c = *P1) && c != '[' && c != '='; ++P1);
 		*P1 = 0;
 		for (tailPP = &g_globalsP; globalP = *tailPP; tailPP = &(globalP->m_nextP)) {
@@ -262,6 +265,7 @@ void initialize_translator(const char *shell_scriptP)
 extern int g_uses_sys;
 extern int g_uses_os;
 extern int g_uses_subprocess;
+extern int g_uses_signal;
 
 extern POSITION position;
 static int comment_byte = -1;
@@ -332,7 +336,7 @@ close_translator()
 
 	print_comments(999999999);
 
-	if (g_uses_sys || g_uses_os || g_uses_subprocess) {
+	if (g_uses_sys || g_uses_os || g_uses_subprocess || g_uses_signal) {
 		if (g_translate_html) {
 			fprintf(outputF, "<tr><td></td><td>");
 		}
@@ -347,6 +351,10 @@ close_translator()
 		}
 		if (g_uses_subprocess) {
 			fprintf(outputF, "%csubprocess", separator);
+			separator = ',';
+		}
+		if (g_uses_signal) {
+			fprintf(outputF, "%csignal", separator);
 			separator = ',';
 		}
 		if (g_translate_html) {
@@ -571,8 +579,33 @@ COMMAND *command;
 	}
 }
 
+static char *
+translate_dequote(char *P)
+{
+	char	*P1;
+
+	switch (*P) {
+	case '\'':
+	case '"':
+		P1 = strchr(P+1, *P);
+		if (P1 && !P1[1]) {
+			*P1 = 0;
+			++P;
+	}	}
+	return P;
+}
+
 static char* translate_word(char* word_to_print, fix_typeE type)
 {
+	if (type == FIX_STRING1) {
+		type = FIX_STRING;
+		goto skip_translations;
+	}
+    if (type == FIX_STRING2) {
+		word_to_print = translate_dequote(word_to_print);
+		type = FIX_STRING;
+	}
+
 	if (!strcmp(word_to_print, "-gt")){
 		return ">";
 	}
@@ -615,6 +648,7 @@ static char* translate_word(char* word_to_print, fix_typeE type)
 	if (!strcmp(word_to_print, "!")){
 		return " not ";
 	}
+skip_translations:
 	if (word_to_print[0] != '\0') {
 		if (type != FIX_SKIP) {
 			word_to_print = fix_string(word_to_print, type);
@@ -625,9 +659,11 @@ static char* translate_word(char* word_to_print, fix_typeE type)
 void
 print_word_list (WORD_LIST *list, char *separator, int type)
 {
-	WORD_LIST *w;
+	WORD_LIST 	*w;
+	int			lth;
+	char		*word_to_print, *P, *P1;
 
-	char* word_to_print;
+	lth = g_output.m_lth;
 	for (w = list; w; w = w->next){
 		word_to_print = w->word->word;
 		word_to_print = translate_word(word_to_print, type);
@@ -635,6 +671,27 @@ print_word_list (WORD_LIST *list, char *separator, int type)
 		if (w->next) {
 			burps(&g_output, separator);
 		}
+	}
+	for (P = g_output.m_P + lth; P = strchr(P,'"'); ) {
+		if (g_output.m_P < P && P[-1] == '\\') {
+			++P;
+			continue;
+		}
+		for (P1 = P+1; *P1 == ' '; ++P1);
+		if (*P1 != '+') {
+			P = P1;
+			continue;
+		}
+		for (++P1; *P1 == ' '; ++P1);
+		if (*P1 != '"' || !strncmp(P1, "\" \".", 4)) {
+			P = P1;
+			continue;
+		}
+		++P1;
+		lth = g_output.m_lth - (P1 - g_output.m_P);
+		memcpy(P, P1, lth);
+		P[lth] = 0;
+		g_output.m_lth -= (P1 - P);
 	}
 }
 
@@ -969,8 +1026,11 @@ void
 print_case_command_head (case_command)
 CASE_COM *case_command;
 {
-	case_var = case_command->word->word;
-	case_var = translate_word(case_var, FIX_STRING);
+	char *P;
+
+	case_var.m_lth = 0;
+	P = translate_word(case_command->word->word, FIX_STRING);
+	burps(&case_var, P);
 }
 
 void
@@ -993,15 +1053,18 @@ CASE_COM *case_command;
 }
 
 static void print_case_ors(WORD_LIST* patterns){
-	WORD_LIST *w;
+	WORD_LIST 	*w;
+	char		*P;
+
 	for (w = patterns; w; w = w->next){
 		if (!strcmp(w->word->word, "*")){
 			continue;
 		}
 		burps(&g_output, " or ");
-		burps(&g_output, case_var);
+		burps(&g_output, case_var.m_P);
 		burps(&g_output, " == '");
-		burps(&g_output, w->word->word);
+		P = translate_dequote(w->word->word);
+		burps(&g_output, P);
 		burpc(&g_output, '\'');
 	}
 }
@@ -1010,6 +1073,8 @@ static void
 print_case_clauses (clauses)
 PATTERN_LIST *clauses;
 {
+	char *P;
+
 	while (clauses)
 	{
 		newline ("");
@@ -1018,16 +1083,18 @@ PATTERN_LIST *clauses;
 		} else {
 			if (first_if) {
 				burps(&g_output, "if ( ");
-				burps(&g_output, case_var);
+				burps(&g_output, case_var.m_P);
 				burps(&g_output, " == ");
 				first_if  = 0;
 			} else{
 				burps(&g_output, "elif ( ");
-				burps(&g_output, case_var);
+				burps(&g_output, case_var.m_P);
 				burps(&g_output, " == ");
 			}
 			burpc(&g_output, '\'');
-			burps(&g_output, clauses->patterns->word->word);
+
+			P = translate_dequote(clauses->patterns->word->word);
+			burps(&g_output, P);
 			burpc(&g_output, '\'');
 			print_case_ors(clauses->patterns->next);
 			burps(&g_output, "):");
@@ -1361,9 +1428,9 @@ int is_external_command(SIMPLE_COM *simple_command){
 	WORD_LIST* word_list = simple_command->words;
 
 	static const char *internal_commands[] = {
-	"exit", "echo", "cd", "pwd", "read", "return", "true", "false",
-	"break", "continue", "", "[", "let", "printf", "export", "eval",
-	"local",
+	"break", "cd", "continue", "declare", "echo", "eval", "exit", "export",
+    "false", "let", "local", "printf", "pwd", "read", "return", "true", "trap",
+	"", "[", ":",
 	0 };
 
 	const char *commandP;
@@ -1434,13 +1501,34 @@ print_popen_redirection (REDIRECT *redirect)
 	{
 	case r_deblank_reading_until:
 	case r_reading_until:
-		burps(&g_output,"_rc.communicate(\"\"\"");
-		burps(&g_output, redirect->redirectee.filename->word);
-		burps(&g_output,"\"\"\")");
+    {
+		int 	lth, c;
+		char	*P;
+
+		burps(&g_output,"_rc.communicate(");
+		lth = g_output.m_lth;
+		burpc(&g_output, '"');
+		for (P = redirect->redirectee.filename->word; c = *P; ++P) {
+			switch (c) {
+			case '\n':
+				burps(&g_output, "\\n");
+				continue;
+			case '"':
+			case '\\':
+				burpc(&g_output, '\\');
+				break;
+			}
+			burpc(&g_output, c);
+		}
+		burpc(&g_output, '"');
+		g_output.m_lth = lth;
+		burps(&g_output, fix_string(g_output.m_P+lth, FIX_STRING));
+		burpc(&g_output,')');
 		break;
+    }
 	case r_reading_string:
 		burps(&g_output,"_rc.communicate(");
-		burps(&g_output, redirect->redirectee.filename->word);
+		burps(&g_output, fix_string(redirect->redirectee.filename->word, FIX_STRING));
 		burps(&g_output,"+'\\n')");
 		break;
 	}
@@ -1469,25 +1557,29 @@ print_simple_command_helper(SIMPLE_COM *simple_command)
 			burps(&g_output, "()");
 			return;
 		} 
-		if (simple_command->redirects) {
+		WORD_LIST 	*w;
+		char 		*word_to_print;
+
+		w = simple_command->words;
+		word_to_print = w->word->word;
+
+		if (simple_command->redirects || !strcmp(word_to_print,"test")) {
 			g_uses_subprocess = 1;
-			burps(&g_output, "_rc = subprocess.Popen(");
-			print_word_list (simple_command->words, " + \" \" + ", FIX_STRING);
+			burps(&g_output, "_rc = subprocess.call(");
+			print_word_list (simple_command->words, " + \" \" + ", FIX_STRING1);
 			burps(&g_output, ",shell=True");
 			print_popen_flags(simple_command->redirects);
 			burps(&g_output, ")\n");
 			print_popen_redirection_list(simple_command->redirects);
 			return;
 		} 
-		WORD_LIST 	*w;
-		char 		*word_to_print;
 		g_uses_subprocess = 1;
 		burps(&g_output, "_rc = subprocess.call(");
 
 #if 1
 		burpc(&g_output,'[');
-		for (w = simple_command->words; w; w = w->next) {
-			word_to_print = translate_word(w->word->word, FIX_STRING);
+		for (; w; w = w->next) {
+			word_to_print = translate_word(w->word->word, FIX_STRING1);
 			burps(&g_output, word_to_print);
 			if (!w->next) {
 				break;
@@ -1496,7 +1588,7 @@ print_simple_command_helper(SIMPLE_COM *simple_command)
 		}
 		burps(&g_output, "])");
 #else
-		print_word_list (simple_command->words, " + \" \" + ", FIX_STRING);
+		print_word_list (w, " + \" \" + ", FIX_STRING);
 		burps(&g_output, ",shell=True)");
 #endif
 		return;
@@ -1506,6 +1598,60 @@ print_simple_command_helper(SIMPLE_COM *simple_command)
 	char	 * wordP;
 
 	wordP = word_list->word->word;
+
+	if (!strcmp(wordP, "declare")) {
+		char	*P;
+		int 	separator;
+
+		separator = -1;
+		for (;word_list = word_list->next;) {
+			wordP = word_list->word->word;
+			if (wordP[0] == '-') {
+				if (!strcmp(wordP, "-p")) {
+					if (separator == -1) {
+						separator = 0;
+						burps(&g_output, "print(");
+				}	}
+				continue;
+			}
+			if (separator != -1) {
+				if (separator) {
+					burpc(&g_output, separator);
+				}
+				P = strchr(wordP, '=');
+				if (P) {
+					*P = 0;
+				}
+				burps(&g_output, wordP);
+				separator = ',';
+				continue;
+			}
+			if (!strchr(wordP, '=')) {
+				burps(&g_output, wordP);
+				burps(&g_output, "=\"\"");
+			} else {
+				burps(&g_output, fix_string(wordP, FIX_NONE));
+			}
+			burpc(&g_output, '\n');
+		}
+		if (separator != -1) {
+			if (!separator) {
+				burps(&g_output, "dir()");
+			}
+			burps(&g_output, ")\n");
+		}
+		return;
+	}
+
+	if (!strcmp(wordP,":")) {
+		// Do nothing beyond expanding arguments and performing redirections.
+        // The return status is zero. 
+		word_list = word_list->next;
+		if (!word_list) {
+			return;
+		}
+		wordP     = word_list->word->word;
+	}
 
 	if (word_list->next && word_list->next->next && word_list->next->next->next && !strcmp(wordP, "[")){
 		word_list = word_list->next;
@@ -1582,8 +1728,44 @@ print_simple_command_helper(SIMPLE_COM *simple_command)
 		return;
 	}
 	if (!strcmp(wordP, "read")){
-		if (word_list->next) {
-			burps(&g_output, word_list->next->word->word);
+		char *targetP = 0;
+
+		for (; word_list = word_list->next; ) {
+			wordP = word_list->word->word;
+			if (wordP[0] != '-') {
+				targetP = wordP;
+				break;
+			}
+			switch (wordP[1]) {
+			case 'a':
+				targetP = word_list->next->word->word;
+				break;
+			default:
+				for (; *++wordP; ) {
+					switch (*wordP) {
+					case 'i':
+					case 'd':
+					case 'n':
+					case 'N':
+					case 'p':
+					case 't':
+					case 'u':
+						word_list = word_list->next;
+						break;
+					default:
+						continue;
+					}
+					break;
+				}
+				if (word_list) {
+					continue;
+				}
+				break;
+			}
+			break;
+		}
+		if (targetP) {
+			burps(&g_output, targetP);
 			burps(&g_output, " = raw_input()");
 			return;
 		}
@@ -1611,7 +1793,7 @@ print_simple_command_helper(SIMPLE_COM *simple_command)
 		return;
 	} 
 	if (!strcmp(wordP, "let")){
-		print_word_list(word_list->next, " ", FIX_STRING);
+		print_word_list(word_list->next, " ", FIX_STRING2);
 		return;
 	}
 	if (!strcmp(wordP, "printf")){
@@ -1623,10 +1805,53 @@ print_simple_command_helper(SIMPLE_COM *simple_command)
 		return;
 	}
 	if (!strcmp(wordP, "local")) {
-		word_list = word_list->next;
-		seen_global(word_list->word->word, 1);
-		
+		for (; word_list = word_list->next;) {
+			wordP = word_list->word->word;
+			seen_global(wordP, 1);
+			if (strchr(wordP, '=')) {
+				burps(&g_output, translate_word(wordP, FIX_STRING));
+				burpc(&g_output, '\n');
+		}	}
+		return;
 	}
+	if (!strcmp(wordP, "trap")) {
+		char	*handlerP = 0;
+		char	*sigP     = 0;
+
+		// trap [-lp] [arg] [sigspec]
+		for (; word_list = word_list->next; ) {
+			wordP = word_list->word->word;
+			if (*wordP == '-' && (wordP[1] == 'l' || wordP[1] == 'p')) {
+				continue;
+			}
+			if (!handlerP) {
+				handlerP = wordP;
+				continue;
+			}
+			if (!sigP) {
+				sigP = wordP;
+		}	}
+		if (!sigP) {
+			sigP = handlerP;
+			handlerP = "signal.SIG_DFL";
+		} else if (*handlerP == 0 || !strcmp(handlerP, "-")) {
+			handlerP = "signal.SIG_IGN";
+		}
+		// signal.signal(signal.SIGALRM, handler)
+		g_uses_signal = 1;
+		burps(&g_output, "signal.signal(");
+		if (sigP) {
+			burps(&g_output, "signal.SIG");
+			burps(&g_output, sigP);
+		}
+		burpc(&g_output, ',');
+		if (handlerP) {
+			burps(&g_output, handlerP);
+		}
+		burps(&g_output, ")\n");
+		return;
+	}
+
 	print_word_list(word_list, " ", FIX_STRING);
 	return;
 }

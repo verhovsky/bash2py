@@ -27,12 +27,12 @@ SCORE="0"</pre></td></tr>
 </pre></td><td></td></tr>
 <tr><td><pre>foo="`date` `pwd`"
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>foo=os.popen("date").read()+" "+os.popen("pwd").read()</pre></td></tr>
+<tr><td></td><td><pre>foo=str(os.popen("date").read()) + " " + str(os.popen("pwd").read())</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>echo $foo
 </pre></td><td></td></tr>
-<tr><td></td><td><pre>print(str(foo))</pre></td></tr>
+<tr><td></td><td><pre>print(foo)</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>while true; do
@@ -57,13 +57,13 @@ done
     SCORE = raw_input()
     if ("$SCORE" &lt; "0" or "$SCORE" &gt; "100" ):
         print("Be serious.  Common, try again: ")
-    elif (SCORE == "q"  ):
-        print("Average rating: "+str(AVERAGE)+"%.")
+    elif ("SCORE" == ""q""  ):
+        print("Average rating: " + str(AVERAGE) + "%.")
         break
     else:
-        SUM=str([$SUM + $SCORE])
-        NUM=str([$NUM + 1])
-        AVERAGE=str([$SUM / $NUM])</pre></td></tr>
+        SUM=[SUM +" SCORE]
+        NUM=[NUM +" 1]
+        AVERAGE=[SUM /" NUM]</pre></td></tr>
 <tr><td><pre>
 </pre></td><td></td></tr>
 <tr><td><pre>echo "Exiting."
