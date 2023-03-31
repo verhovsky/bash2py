@@ -143,7 +143,7 @@ typedef union YYSTYPE
 {
 
 /* Line 2068 of yacc.c  */
-#line 325 "./parse.y"
+#line 330 "./parse.y"
 
   POSITION  position;
   WORD_DESC *word;		/* the word that we read. */

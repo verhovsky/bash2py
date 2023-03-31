@@ -1,2 +1,2 @@
 #!/bin/sh
-python bash2py.py $1 $2
+python bash2py.py $*

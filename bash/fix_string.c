@@ -4,18 +4,28 @@
 #include <ctype.h>
 #include <assert.h>
 #include "burp.h"
+#include "fix_string.h"
 
 static burpT g_buffer      = {0, 0, 0};
 static burpT g_new         = {0, 0, 0};
 static burpT g_save_buffer = {0, 0, 0};
 static burpT g_save_new    = {0, 0, 0};
 
-int g_uses_sys = 0;
-int g_uses_os  = 0;
+int g_uses_sys        = 0;
+int g_uses_os         = 0;
+int g_uses_subprocess = 0;
 
-#ifdef TEST
-int g_verbose = 0;
+fix_typeE	g_type;
+
+
+#ifndef TEST
+extern int g_translate_html;
+extern	void seen_global(const char *nameP, int local);
 #endif
+
+static char *recursively_fix_string(const char *stringP, int separator);
+
+#define WHITESPACE_MARKER 1
 
 static void
 exchange(burpT *oldP, burpT *newP)
@@ -27,78 +37,19 @@ exchange(burpT *oldP, burpT *newP)
 	*newP  = temp;
 }
 
-/* Bash:
-
-Enclosing characters in single quotes preserves the literal value of each
-character within the quotes. A single quote may not occur between single
-quotes, even when preceded by a backslash. 
-
-*/
-
-static void
-fixSingleQuotes(void)
+static int
+xspace(int c)
 {
-	char	*P;
-	int		in_quote;
-
-restart:
-	in_quote = 0;
-	for (P = g_buffer.m_P; *P; ++P) {
-		switch (*P) {
-		case '"':
-			if (in_quote) {
-				if (in_quote == '"') {
-					in_quote = 0;
-				}
-				break;
-			}
-			in_quote = '"';
-			break;
-		case '\\':
-			if (in_quote != '\'') {
-				++P;
-			}
-			break;
-		case '`':
-			if (in_quote != '\'') {
-				for (++P; *P != '`'; ++P) {
-					if (*P == '\\') {
-						++P;
-			}	}	}
-			break;
-		case '\'':
-			if (in_quote) {
-				if (in_quote == '\'') {
-					in_quote = 0;
-				}
-				break;
-			} 
-				
-			if (P == g_buffer.m_P || P[-1] != 'r') {
-				g_new.m_lth = 0;
-				burpn(&g_new, g_buffer.m_P, P - g_buffer.m_P);
-				burpc(&g_new, 'r');
-				burps(&g_new, P);
-				exchange(&g_buffer, &g_new);
-				goto restart;
-			}
-			in_quote = '\'';
-			break;
-		}
-	}
+	return (isspace(c) || c == WHITESPACE_MARKER);
 }
 
 static char *
 endSpecial(char *startP)
 {
-#ifndef TEST
-	extern	void seen_global(const char *nameP);
-#endif
 
-	char	*P;
+	char	*P, *P1;
 	int		openbrace, closebrace, nesting;
-	char	*nameP;
-	int		name_lth, c;
+	int		c;
 
 	switch (*startP) {
 	case '`':
@@ -114,7 +65,6 @@ endSpecial(char *startP)
 		break;
 	case '$':
 		P = startP + 1;
-		nameP = 0;
 brace:
 		switch (*P) {
 		case '(':
@@ -134,55 +84,47 @@ brace:
 		case '#':
 		case '?':
 		case '-':
+		case '_':
 		case '$':
 		case '!':
 		case '0':
-		case '_':
+		case '1':
+		case '2':
+		case '3':
+		case '4':
+		case '5':
+		case '6':
+		case '7':
+		case '8':
+		case '9':
 			return P+1;
 		default:
-			openbrace  = 0;
+			for (;isalnum(*P) || *P == '_'; ++P);
+			return P;
 		}
-		if (openbrace) {
-			nesting = 0;
-			for (; *P; ++P) {
-				if (*P == openbrace) {
-					++nesting;
-                    nameP = P+1;
-					continue;
-				}
-				if (*P == closebrace) {
-					if (nameP) {
-						name_lth = P - nameP;
-					}
-					if (!--nesting) {
-						++P;
-						goto seen;
-					}
-					continue;
-				}
-				if (*P == '\\') {
+		nesting = 0;
+		for (; *P; ++P) {
+			if (*P == openbrace) {
+				++nesting;
+				continue;
+			}
+			if (*P == closebrace) {
+				if (!--nesting) {
 					++P;
+					return P;
 				}
-		}	}
-		if (isdigit(*P)) {
-			return P+1;
+				continue;
+			}
+			if (*P == '\\') {
+				++P;
+			}
 		}
-		nameP = P;
-		for (; isalnum(*P) || *P == '_'; ++P);
-		name_lth = P - nameP;
-seen:
-		if (nameP) {
-			c = nameP[name_lth];
-			nameP[name_lth] = 0;
-#ifndef TEST
-			seen_global(nameP);
-#endif
-			nameP[name_lth] = c;
-		}
-		return(P);
 	}
 	return 0;
 }
+
+
+/* Turn anything not quoted into being double quoted */
 
 static void
 addDoubleQuotes(void)
@@ -213,7 +155,19 @@ restart:
 	startP   = 0;
 
 	for (P = g_buffer.m_P; (c = *P) == '_' || isalpha(c) || (P != g_buffer.m_P && isdigit(c)); ++P);
+	P1 = P;
+	if (c == '[') {
+		for (++P; isdigit(*P); ++P);
+		if (*P == ']') {
+			c = *++P;
+	}	}
 	if (c == '=') {
+#ifndef TEST
+		c   = *P1;
+		*P1 = 0;
+		seen_global(g_buffer.m_P, 0);
+		*P1 = c;
+#endif
 		++P;
 	} else {
 		P = g_buffer.m_P;
@@ -238,10 +192,8 @@ restart:
 				break;
 			}
 			in_quote = '"';
-			if (state == unquoted_state) {
-				goto add_trailing_quote;
-			}
 			break;
+		case '$':
 		case '`':
 			if (!in_quote) {
 				state = unquoted_state;
@@ -249,10 +201,7 @@ restart:
 					startP = P;
 			}	}
 			// This takes priority
-			for (++P; *P != '`'; ++P) {
-				if (*P == '\\') {
-					++P;
-			}	}
+			P = endSpecial(P) - 1;
 			break;
 		case '\\':
 			if (in_quote != '\'') {
@@ -280,9 +229,10 @@ restart:
 			if (in_quote) {
 				break;
 			}
-			if (isspace(c) || !c || c == '|' || c == '&' || c == ';' || c == '(' || c == ')' || c == '<' || c == '>' || c== '"') {
+			if (xspace(c) || !c || c == '|' || c == '&' || c == ';' || c == '(' || c == ')' || c == '<' || c == '>') {
 				if (state == unquoted_state) {
-add_trailing_quote: g_new.m_lth = 0;
+					// add trailing quote
+					g_new.m_lth = 0;
 					burpn(&g_new, g_buffer.m_P, startP - g_buffer.m_P);
 					burpc(&g_new, '"');
 					for (P1 = startP; P1 < P; ++P1) {
@@ -326,7 +276,11 @@ add_trailing_quote: g_new.m_lth = 0;
 				continue;
 			}
 			if (c == '$' || c == '`' || (c == '(' && P[1] == '(')) {
-				state = unquoted_state;
+				if (P == startP) {
+					state = special_state;
+				} else {
+					state = unquoted_state;
+				}
 				P = endSpecial(P) - 1;
 				continue;
 			}
@@ -341,56 +295,211 @@ add_trailing_quote: g_new.m_lth = 0;
 }
 
 static void
-compactDoubleQuotes(void)
+emit_variable(char *startP, char *endP, int braced)
 {
-	char	*P;
-	int		c, in_quote;
+	char	*P, *P1;
+	int		c, c1;
 
-	// If it is a range leave it alone
-	if (g_buffer.m_P[0] == '{') {
+	c 	  = *endP;
+	*endP = 0;
+
+	if (braced) {
+		P1 = strchr(startP, ':');
+		if (P1) {
+			if (P1[1] == '-') {
+				*P1 = 0;
+				burps(&g_new,"'");
+				burps(&g_new, P1+2);
+				burps(&g_new, "' if dir().count('");
+				burps(&g_new, startP);
+				burps(&g_new, "') == 0 or ");
+				burps(&g_new, startP);
+				burps(&g_new, " == '' else ");
+				emit_variable(startP, P1, 0);
+				*endP = c;
+				return;
+			}
+			*endP = c;
+			endP  = P1;
+			c     = *endP;
+			*endP = 0;
+	}	}
+
+	switch (*startP) {
+	case '*':
+		g_uses_sys = 1;
+		burps(&g_new, "\" \".join(sys.argv[1:])");
+		break;
+	case '@':
+		g_uses_sys = 1;
+		burps(&g_new, "'\"'+\"\\\" \\\"\".join(sys.argv[1:])+'\"'");
+		break;
+	case '#':
+		// Expands to the number of positional parameters
+		g_uses_sys = 1;
+		burps(&g_new, "len(sys.argv)");
+		break;
+	case '$':
+		// Expands to the process id of the shell
+		g_uses_os = 1;
+		burps(&g_new, "os.getpid()");
+		break;
+	case '!':
+		burps(&g_new, "DOLLAR_EXCLAMATION");
+		break;
+	case '_':
+		burps(&g_new, "DOLLAR_UNDERBAR");
+		break;
+		break;
+	case '-':
+		burps(&g_new, "DOLLAR_HYPHEN");
+		break;
+		// Expands to the current option flags
+		break;
+	case '0':
+		burps(&g_new, "__file__");
+		break;
+	case '1':
+	case '2':
+	case '3':
+	case '4':
+	case '5':
+	case '6':
+	case '7':
+	case '8':
+	case '9':
+		g_uses_sys = 1;
+		for (P = startP+1; isdigit(*P) && P < endP; ++P);
+		burps(&g_new, "sys.argv[");
+		burpn(&g_new, startP, P - startP);
+		burps(&g_new, "]");
+		break;
+	case '?':
+		burps(&g_new, "_rc");
+		break;
+	default:
+		burps(&g_new, startP);
+#ifndef TEST
+		for (P = startP; (c1 = *P) && (isalnum(c1) || c1 == '_'); ++P);
+		*P = 0;
+		seen_global(startP, 0);
+		*P = c1;
+#endif
+	}
+	*endP = c;
+}
+
+static void
+emitSpecial(char *P, char *endP)
+{
+	char *P1, *P2;
+
+	if (*P == '$' && P[1] == '(' && P[2] == '(') {
+		// Discard the $(..) wrapper
+		endP[-1] = 0;
+		burps(&g_new, P+2);
+		return;
+	} 
+	if (*P == '`' || (*P == '$' && P[1] == '(')) {
+		endP[-1] = 0;
+		if (*P == '`') {
+			++P;
+			for (P1 = P2 = P; *P1; ++P1) {
+				if (*P1 == '\\') {
+					++P1;
+				}
+				*P2++ = *P1;
+			}
+			*P2 = 0;
+		} else {
+			P  += 2;
+		}
+		P1 = recursively_fix_string(P,'"');
+		g_uses_os = 1;
+		burps(&g_new, "os.popen(");
+		burps_html(&g_new, P1);
+		free(P1);
+		burps(&g_new, ").read()");
+		return;
+	} 
+	// A variable that might not look like a string
+	if (g_type == FIX_STRING) {
+		burps(&g_new, "str(");
+	}
+	if (*P == '(') {
+		// remove ((..)) wrapper
+		P       += 2;
+		endP[-2] = 0;
+		burps(&g_new, P);
+		return;
+	} 
+	if (*P == '[') {
+		// remove [...] wrapper
+		++P;
+		endP[-1] = 0;
+		burps(&g_new, P);
 		return;
 	}
+	if (P[1] != '{') {
+		emit_variable(P+1, endP, 0);
+	} else {
+		emit_variable(P+2, endP-1, 1);
+	}
+	if (g_type == FIX_STRING) {
+		burpc(&g_new, ')');
+	}
+	return;
+}
 
-	in_quote = 0;
+/* Produce a command that can be executed */
+
+static void
+addOuterQuotes(void)
+{
+	char	*P, *endP;
+	int 	in_quotes;
+	int		c;
+
+	g_new.m_lth = 0;
+	in_quotes   = 0;
 	for (P = g_buffer.m_P; c = *P; ++P) {
-		switch (c) {
-		case '\'':
-			if (in_quote) {
-				if (in_quote == '\'') {
-					in_quote = 0;
-				}
-				break;
-			}
-			in_quote = '\'';
-			break;
-		case '"':
-			if (in_quote) {
-				if (in_quote == '"') {
-					if (P[1] != '"') {
-						in_quote = 0;
-					} else {
-						memcpy(P, P+2, g_buffer.m_lth - (P - g_buffer.m_P) - 2);
-						g_buffer.m_lth -= 2;
-						g_buffer.m_P[g_buffer.m_lth] = 0;
-					}
-				}
-				break;
-			}
-			in_quote = '"';
-			break;
+		switch(c) {
 		case '`':
-			// This takes priority
-			for (++P; *P != '`'; ++P) {
-				if (*P == '\\') {
-					++P;
-			}	}
-			break;
-		case '\\':
-			if (in_quote != '\'') {
-				++P;
+		case '(':
+		case '$':
+			endP = endSpecial(P);
+			if (!endP) {
+				break;
 			}
-			break;
-	}	}
+			if (in_quotes) {
+				if (in_quotes == '"') {
+					burpc(&g_new, '"');
+				}
+				burpc(&g_new, '+');
+			}
+			emitSpecial(P, endP);
+			P = endP - 1;
+			in_quotes = '$';
+			continue;
+		}
+		if (in_quotes == '$') {
+			burpc(&g_new, '+');
+			in_quotes = 0;
+		}
+		if (in_quotes == 0) {
+			burpc(&g_new, '"');
+			in_quotes = '"';
+		}
+		if (c == '"' || c == '\\') {
+			burpc(&g_new, '\\');
+		}
+		burpc(&g_new, c);
+	}
+	if (in_quotes == '"') {
+		burpc(&g_new, '"');
+	}
+	exchange(&g_buffer, &g_new);
+	return;
 }
 
 /* Break up expansions in strings into separate strings */
@@ -398,442 +507,74 @@ compactDoubleQuotes(void)
 static void
 splitDoubleQuotes(int in_backquotes)
 {
-	char	*P, *P1, *endP, *startP;
-	int		in_quote, lth, c, c1;
+	char	*P, *P1, *P2, *endP, *startP;
+	int		in_quote, lth, c;
 
-restart:
+	in_quote    = 0;
+	g_new.m_lth = 0;
 
-	in_quote = 0;
 	for (P = g_buffer.m_P; c = *P; ++P) {
+		burpc(&g_new, c);
 		switch (c) {
 		case '\'':
 			if (in_quote) {
-				if (in_quote == c) {
+				if (in_quote == '\'') {
+					burpc(&g_new, WHITESPACE_MARKER);
 					in_quote = 0;
 				}
 				break;
 			}
-			for (++P; *P != '\''; ++P);
+			g_new.m_lth--;
+			burpc(&g_new,'r');
+			burpc(&g_new,'\'');
+			in_quote = c;
 			break;
 		case '\\':
-			++P;
+			if (in_quote != '\'') {
+				++P;
+				burpc(&g_new, *P);
+			}
 			break;
 		case '"':
+			if (in_quote) {
+				if (in_quote == '"') {
+					burpc(&g_new, WHITESPACE_MARKER);
+					in_quote = 0;
+				}
+				break;
+			}
 			startP   = P;
-			
-			for (++P; *P && *P != '"'; ++P) {
-				if (*P == '\\') {
-					++P;
-				}
-				endP = endSpecial(P);
-				if (!endP) {
-					continue;
-				}
-				g_new.m_lth = 0;
-				if (P == startP+1) {
-					burpn(&g_new, g_buffer.m_P, startP - g_buffer.m_P);
-					if (*P != '`') {
-						burps(&g_new, "str(");
-						burpn(&g_new, P, endP - P);
-						burpc(&g_new, ')');
-					} else {
-						exchange(&g_buffer, &g_save_buffer);
-						exchange(&g_new,    &g_save_new);
-						g_buffer.m_lth = 0;
-						burpc(&g_buffer, '"');
-						for (P1 = P+1; P1 < endP - 1; ++P1) {
-							if (*P1 == '"') {
-								burpc(&g_buffer,'\\');
-							} else if (*P1 == '\\') {
-								burpc(&g_buffer, *P1++);
-							}
-							burpc(&g_buffer,*P1);
-						}
-						burpc(&g_buffer, '"');
-						splitDoubleQuotes(1);
-						P1 = g_buffer.m_P;
-						exchange(&g_buffer, &g_save_buffer);
-						exchange(&g_new,    &g_save_new);
-						g_uses_os = 1;
-						burps(&g_new, "os.popen(");
-						burps(&g_new, P1);
-						burps(&g_new, ").read()");
-					}
-
-					if (*endP == '"') {
-						c1 = endP[1];
-						if (c1 && !isspace(c1)) {
-							burpc(&g_new, '+');
-						}
-						burps(&g_new, endP+1);
-						exchange(&g_buffer, &g_new);
-						goto restart;
-					}
-					burps(&g_new, " + ");
-					burpc(&g_new, '"');
-					burps(&g_new, endP);
-					exchange(&g_buffer, &g_new);
-					goto restart;
-				}
-				burpn(&g_new, g_buffer.m_P, P - g_buffer.m_P);
-				burpc(&g_new, '"');
-				burps(&g_new, " + ");
-				burpc(&g_new, '"');
-				burps(&g_new, P);
-				exchange(&g_buffer, &g_new);
-				goto restart;
-			}
-		}
-	}
-}
-	
-/* Replace an evaluation of the form $((<eval>)) by (<eval>)
-
-def fixArithmeticExpansion(x):
-    return re.sub(r'\$\((\(.*\))\)', r"\1", x)
-*/
-
-static void
-fixArithmeticExpansion(void)
-{
-	char	*P, *startP;
-	int		inquote, c, nesting, lth;
-
-restart:
-	startP  = 0;
-  	inquote = 0;
-	nesting = 0;
-  	for (P = g_buffer.m_P; c = *P; ++P) {
-		if (!inquote) {
-			switch (c) {
-			case '"':
-			case '\'':
-				inquote = c;
-				break;
-			case '$':
-				if (P[1] == '(' && P[2] == '(') {
-					startP = P;
-					P += 2;
-				}
-				break;
-			case '(':
-				if (startP) {
-					++nesting;
-				}
-				break;
-			case ')':
-				if (startP) {
-					if (nesting) {
-						--nesting;
-						break;
-					}
-					if (P[1] == ')') {
-						lth = P - startP - 2;
-						memcpy(startP, startP + 2, lth);
-						startP += lth;
-						lth = strlen(P+1);
-						memcpy(startP,P+1,lth);
-						startP += lth;
-						*startP = 0;
-						goto restart;
-			}	}	}
-		} else {
-			if (c == '\\') {
-				++P;
-			} else if (c == inquote) {
-				inquote = 0;
-			}
-		}
-	}
-	return;
-}
-
-/* replace `<command>` by os.popen('<command>').read()
-
-def fixBackticksAndEval(x):
-    return re.sub(r'`(.*?)`', r" os.popen('\1').read() ", x)
-*/
-
-static void
-fixBackticks(void)
-{
-	char	*P, *startP;
-	char	*P1;
-	int		inquote, c, lth;
-
-restart:
-	startP  = 0;
-  	inquote = 0;
-  	for (P = g_buffer.m_P; c = *P; ++P) {
-		switch (c) {
-		case '"':
-		case '\'':
-			if (!inquote) {
-				inquote      = c;
-				break;
-			} 
-			if (inquote == c) {
-				inquote      = 0;
-                startP       = 0;
-			}
-			break;
-		case '\\':
-			if (inquote) {
-				++P;
-			}
+			in_quote = c;
 			break;
 		case '`':
-			if (!startP) {
-				startP = P;
-				break;
-			}
-			g_uses_os = 1;
-			g_new.m_lth = 0;
-			burpn(&g_new, g_buffer.m_P, startP - g_buffer.m_P);
-			burps(&g_new, " os.popen(\"");
-			for (P1 = startP + 1; P1 < P; ++P1) {
-				if (*P1 == '"') {
-					burpc(&g_new, '\\');
-				} else if (*P1 == '\\') {
-					burpc(&g_new, *P1++);
-				}
-				burpc(&g_new, *P1);
-			}
-			burps(&g_new, "\").read() ");
-			burps(&g_new, P+1);
-			exchange(&g_buffer, &g_new);
-			goto restart;
-		}
-	}
-	return;
-}
-
-/* replace $(<command>) by os.popen('<command>').read()
-
-def fixEval(x):
-    return re.sub( r'\$\((.*?)\)', r" os.popen('\1').read() ", x)
-*/
-
-static void
-fixEval(void)
-{
-	char	*P, *startP;
-	char	*P1;
-	int		inquote;
-	int		c, lth, nesting;
-
-restart:
-	startP  = 0;
-  	inquote = 0;
-  	for (P = g_buffer.m_P; c = *P; ++P) {
-		switch (c) {
-		case '"':
-		case '\'':
-			if (!inquote) {
-				inquote      = c;
-				break;
-			} 
-			if (inquote == c) {
-				inquote      = 0;
-                startP       = 0;
-				nesting      = 0;
-			}
-			break;
-		case '\\':
-			if (inquote) {
-				++P;
-			}
-			break;
-		case '$':
-			if (P[1] == '(') {
-				startP = P;
-				++P;
-			}
-			break;
 		case '(':
-			if (startP) {
-				++nesting;
-			}
-			break;
-		case ')':
-			if (!startP) {
-				break;
-			}
-			if (nesting) {
-				--nesting;
-				break;
-			}
-			g_uses_os = 1;
-			g_new.m_lth = 0;
-			burpn(&g_new, g_buffer.m_P, startP - g_buffer.m_P);
-			burps(&g_new, " os.popen('");
-			burpn(&g_new, startP + 2, P - startP - 2);
-			burps(&g_new, "').read() ");
-			burps(&g_new, P+1);
-			exchange(&g_buffer, &g_new);
-			goto restart;
-		}
-	}
-	return;
-}
-
-/* Replace $<number> by sys.argv[<number>]
-
-def fixArguments(x):
-    return re.sub(r'\$(\d+)', r"sys.argv[\1]", x)
-*/
-
-static void
-fixArguments(void)
-{
-	char	*P, *startP;
-	char	*P1;
-	int		inquote;
-	int		c, lth;
-
-restart:
-	startP  = 0;
-  	inquote = 0;
-  	for (P = g_buffer.m_P; c = *P; ++P) {
-		switch (c) {
-		case '"':
-		case '\'':
-			if (!inquote) {
-				inquote      = c;
-				break;
-			} 
-			if (inquote == c) {
-				inquote      = 0;
-                startP       = 0;
-			}
-			break;
-		case '\\':
-			if (inquote) {
-				++P;
-			}
-			break;
 		case '$':
-			switch (P[1]) {
-			case '1':
-			case '2':
-			case '3':
-			case '4':
-			case '5':
-			case '6':
-			case '7':
-			case '8':
-			case '9':
-				g_uses_sys = 1;
-				for (startP = P++; isdigit(*P); ++P);
-				g_new.m_lth = 0;
-				burpn(&g_new, g_buffer.m_P, startP - g_buffer.m_P);
-				burps(&g_new, " sys.argv[");
-				burpn(&g_new, startP + 1, P - startP - 1);
-				burps(&g_new, "] ");
-				burps(&g_new, P);
-				exchange(&g_buffer, &g_new);
-				goto restart;
-			case '?':
-				startP = P++;
-				g_new.m_lth = 0;
-				burpn(&g_new, g_buffer.m_P, startP - g_buffer.m_P);
-				burps(&g_new, " _rc ");
-				burps(&g_new, P+1);
-				exchange(&g_buffer, &g_new);
-				goto restart;
+			endP = endSpecial(P);
+			if (!endP) {
 				break;
+			}
+			g_new.m_lth--;	// Discard the character just emitted
+			if (P == startP+1) {
+				// Discard quote before special term
+				g_new.m_lth--;
+			} else {
+				burpc(&g_new, '"');
+				burpc(&g_new, WHITESPACE_MARKER);
+			}
+			emitSpecial(P, endP);
+			burpc(&g_new, WHITESPACE_MARKER);
+			P = endP - 1;
+			if (*endP == '"') {
+				++P;
+				in_quote = 0;
+			} else {
+				burpc(&g_new, '"');
 			}
 		}
 	}
-	return;
+	exchange(&g_buffer, &g_new);
 }
-
-/* replace ${<variable>} with <variable> if not a number
-                         else sys.argv[<number>]
-
-def fixBracketVariables(x):
-    return re.sub(r'\$\{([a-zA-Z_]\w*)\}', r"\1", x)
-*/
-
-static void
-fixBracketVariables(void)
-{
-	char	*P, *startP;
-	char	*P1;
-	int		inquote;
-	int		c, lth, nesting;
-
-restart:
-	startP  = 0;
-  	inquote = 0;
-  	for (P = g_buffer.m_P; c = *P; ++P) {
-		switch (c) {
-		case '"':
-		case '\'':
-			if (!inquote) {
-				inquote      = c;
-				break;
-			} 
-			if (inquote == c) {
-				inquote      = 0;
-                startP       = 0;
-				nesting      = 0;
-			}
-			break;
-		case '\\':
-			if (inquote) {
-				++P;
-			}
-			break;
-		case '$':
-			if (P[1] == '{') {
-				startP = P;
-				++P;
-			}
-			break;
-		case '{':
-			if (startP) {
-				++nesting;
-			}
-			break;
-		case '}':
-			if (!startP) {
-				break;
-			}
-			if (nesting) {
-				--nesting;
-				break;
-			}
-			for (P1 = startP+2; ; ++P1) {
-				if (P1 == P) {
-					g_uses_sys = 1;
-					g_new.m_lth = 0;
-					burpn(&g_new, g_buffer.m_P, startP - g_buffer.m_P);
-					burps(&g_new, "sys.argv[");
-					burpn(&g_new, startP+2, P - startP - 2);
-					burpc(&g_new, ']');
-					burps(&g_new, P + 1);
-					exchange(&g_buffer, &g_new);
-					goto restart;
-				}
-				if (!isdigit(*P1)) {
-					break;
-			}	}
-
-			lth = P - startP - 2;
-			memcpy(startP, startP+2, lth);
-			startP += lth;
-			lth = strlen(P+1);
-			memcpy(startP, P+1, lth);
-			startP += lth;
-			*startP = 0;
-			g_buffer.m_lth = startP - g_buffer.m_P;
-			goto restart;
-		}
-	}
-	return;
-}
-
+	
 /* replace {<word1>..<word2>} with range(<word1>, <word2>)
    replace {<word1>..<word2>..<word3>} with range(<word1>,<word2>,<word3>)
 
@@ -929,112 +670,6 @@ restart:
 	return;
 }
 
-/* replace $[<value>] by <value>
-
-def fixSquareBrackets(x):
-    return re.sub(r'\$\[(.*?)\]', r'\1', x)
-
-*/
-
-static void
-fixSquareBrackets(void)
-{
-	char	*startP, *P;
-	int		inquote, c, nesting, lth;
-
-restart:
-  	inquote = 0;
-	startP  = 0;
-  	for (P = g_buffer.m_P; c = *P; ++P) {
-		switch (c) {
-		case '"':
-		case '\'':
-			if (!inquote) {
-				inquote      = c;
-				break;
-			} 
-			if (inquote == c) {
-				inquote      = 0;
-				startP       = 0;
-			}
-			break;
-		case '\\':
-			if (inquote) {
-				++P;
-			}
-			break;
-		case '$':
-			if (P[1] == '[') {
-				startP = P;
-				nesting = 0;
-			}
-			break;
-		case '[':
-			++nesting;
-			break;
-		case ']':
-			if (!startP) {
-				break;
-			}
-			if (nesting) {
-				--nesting;
-			}
-			lth = P - startP - 3;
-			memcpy(startP, startP+2,lth);
-			startP += lth;
-			lth     = strlen(P+1);
-			memcpy(startP, P+1, lth);
-			startP += lth;
-			*startP = 0;
-			g_buffer.m_lth = startP - g_buffer.m_P;
-			goto restart;
-		}
-	}
-	return;
-}
-
-/* 
-def fixVariables(x):
-    return re.sub( r'\$([a-zA-Z_]\w*)', r"\1", x)
-*/
-
-static void
-fixVariables(void)
-{
-	char	*P;
-	int		inquote, c, lth;
-
-restart:
-  	inquote = 0;
-  	for (P = g_buffer.m_P; c = *P; ++P) {
-		switch (c) {
-		case '"':
-		case '\'':
-			if (!inquote) {
-				inquote      = c;
-				break;
-			} 
-			if (inquote == c) {
-				inquote      = 0;
-			}
-			break;
-		case '\\':
-			if (inquote) {
-				++P;
-			}
-			break;
-		case '$':
-			lth = strlen(P+1);
-			memcpy(P, P+1, lth);
-			P += lth;
-			*P = 0;
-			--g_buffer.m_lth;
-			goto restart;
-		}
-	}
-	return;
-}
-
 static void
 fixPath(void)
 {
@@ -1098,109 +733,137 @@ fixPath(void)
 	return;
 }
 
-char *
-fix_string(const char *stringP)
+static char *
+fix_string1(const char *stringP, int separator)
 {
-  	int 		lth;
-	const char 	*P;
-	char		*P1;
-
+  	int 	lth;
+	const char	*P0;
+	char 	*P, *P1, *P2, *P3;
+	int		c;
 
 	/* Strip */
-  	for (P = stringP; isspace(*P); ++P);
+  	for (P0 = stringP; xspace(*P0); ++P0);
 	g_buffer.m_lth = 0;
-	burps(&g_buffer, P);
-	for (lth = g_buffer.m_lth; lth && isspace(g_buffer.m_P[lth-1]); --lth);
+	burps(&g_buffer, P0);
+	for (lth = g_buffer.m_lth; lth && xspace(g_buffer.m_P[lth-1]); --lth);
   	g_buffer.m_P[lth] = 0;
 	g_buffer.m_lth    = lth;
-    if (lth < 1) {
-		goto done;
+    if (0 < lth) {
+		if (separator == '"') {
+			addOuterQuotes();
+		} else {
+			addDoubleQuotes();
+			splitDoubleQuotes(0);
+		}
+		fixRange();
+		fixPath();
+	}
+	P = g_buffer.m_P;
+	burp_init(&g_buffer);
+	if (separator == '"') {
+		return P;
 	}
 
-	fixSingleQuotes();
-#ifdef TEST
-	if (g_verbose) {
-		printf("  fixSingleQuotes> %s\n", g_buffer.m_P);
+	for (P1 = P; c = *P1; ++P1) {
+		if (c == WHITESPACE_MARKER) {
+			for (P3 = P1+1; isspace(*P3); ++P3);
+			if (!*P3) {
+				break;
+			}
+			if (separator == '+' && P1[1] == ' ') {
+				if (P < P1) {
+					if (P1[-1] == '"' && *P3 == '"') {
+						g_buffer.m_lth--;
+						// Joint two adjacent strings with a blank
+						c  = ' ';
+						P1 = P3;
+						goto advance;
+					}
+					if (P1[-1] == '\'' && *P3 == 'r' && P3[1] == '\'') {
+						g_buffer.m_lth--;
+						// Joint two adjacent strings with a blank
+						c = ' ';
+						P1 = P3+1;
+						goto advance;
+					}
+				} 
+				c = g_buffer.m_P[g_buffer.m_lth-1];
+				if (c == '\'') {
+					--g_buffer.m_lth;
+					burps(&g_buffer, " '+");
+					P1 = P3-1;
+					continue;
+				}
+				if (c == '"') {
+					--g_buffer.m_lth;
+					burps(&g_buffer, " \"+");
+					P1 = P3-1;
+					continue;
+				} 
+				if (*P3 == '"') {
+					burps(&g_buffer, "+\" ");
+					P1 = P3;
+					continue;
+				}
+				if (*P3 == 'r' && P3[1] == '\'') {
+					burps(&g_buffer, "+r' ");
+					P1 = P3 + 1;
+					continue;
+				}
+				burps(&g_buffer, "+\" \"+");
+				P1 = P3-1;
+				continue;
+			} 
+			P1 = P3-1;
+			c = separator;
+		}
+advance:
+		burpc(&g_buffer, c);
 	}
+	free(P);
+	P = g_buffer.m_P;
+	burp_init(&g_buffer);
+	return P;
+}
+
+static char *
+recursively_fix_string(const char *stringP, int separator)
+{
+	burpT	buffer      = g_buffer;
+	burpT	new1        = g_new;
+	burpT	save_buffer = g_save_buffer;
+	burpT	save_new    = g_save_new;
+	char	*P;
+
+	burp_init(&g_buffer);
+	burp_init(&g_new);
+	burp_init(&g_save_buffer);
+	burp_init(&g_save_new);
+
+	P = fix_string1(stringP, separator);
+
+	/* Memory leakage here but don't know where P came from */
+	g_buffer      = buffer;
+	g_new         = new1;
+	g_save_buffer = save_buffer;
+	g_save_new    = save_new;
+	return(P);
+}
+
+char *fix_string(const char *stringP, fix_typeE type)
+{
+	char *P;
+
+#ifndef TEST
+	int save         = g_translate_html;
+	g_translate_html = 0;
 #endif
-	addDoubleQuotes();
-#ifdef TEST
-	if (g_verbose) {
-		printf("  addDoubleQuotes> %s\n", g_buffer.m_P);
-	}
+	g_type           = type;
+	P = fix_string1(stringP,'+');
+#ifndef TEST
+	g_translate_html = save;
 #endif
-	splitDoubleQuotes(0);
-#ifdef TEST
-	if (g_verbose) {
-		printf("splitDoubleQuotes> %s\n", g_buffer.m_P);
-	}
-#endif
-	fixArithmeticExpansion();
-#ifdef TEST
-	if (g_verbose) {
-		printf("    fixArithmetic> %s\n", g_buffer.m_P);
-	}
-#endif
-	fixBackticks();
-#ifdef TEST
-	if (g_verbose) {
-		printf("     fixBackTicks> %s\n", g_buffer.m_P);
-	}
-#endif
-	fixEval();
-#ifdef TEST
-	if (g_verbose) {
-		printf("          fixEval> %s\n", g_buffer.m_P);
-	}
-#endif
-	fixArguments();
-#ifdef TEST
-	if (g_verbose) {
-		printf("     fixArguments> %s\n", g_buffer.m_P);
-	}
-#endif
-	fixBracketVariables();
-#ifdef TEST
-	if (g_verbose) {
-		printf("   fixBracketVars> %s\n", g_buffer.m_P);
-	}
-#endif
-	fixRange();
-#ifdef TEST
-	if (g_verbose) {
-		printf("         fixRange> %s\n", g_buffer.m_P);
-	}
-#endif
-	fixSquareBrackets();
-#ifdef TEST
-	if (g_verbose) {
-		printf("fixSquareBrackets> %s\n", g_buffer.m_P);
-	}
-#endif
-	fixVariables();
-#ifdef TEST
-	if (g_verbose) {
-		printf("     fixVariables> %s\n", g_buffer.m_P);
-	}
-#endif
-	fixPath();
-#ifdef TEST
-	if (g_verbose) {
-		printf("          fixPath> %s\n", g_buffer.m_P);
-	}
-#endif
-	compactDoubleQuotes();
-#ifdef TEST
-	if (g_verbose) {
-		printf("comptDoubleQuotes> %s\n", g_buffer.m_P);
-	}
-#endif
-done:
-	P1             = g_buffer.m_P;
-	g_buffer.m_P   = 0;
-	g_buffer.m_lth = 0;
-	g_buffer.m_max = 0;
-	return P1;
+	return P;
 }
 
 #ifdef TEST
@@ -1212,17 +875,13 @@ main(int argc, char **argv)
 	char	*P;
 	int	lth;
 
-	if (argc == 2) {
-		if (!strcmp(argv[1], "-v")) {
-			g_verbose = 1;
-	}	}
 	while(0 <= getline(&bufferP, &buffer_lth, stdin)) {
 		lth = strlen(bufferP);
 		if (lth && bufferP[lth-1] == '\n') {
 			bufferP[lth-1] = 0;
 		}
 		printf("> %s$\n", bufferP);
-		P = fix_string(bufferP);
+		P = fix_string(bufferP, FIX_STRING);
 		printf("< %s$\n", P);
 		free(P);
 	}

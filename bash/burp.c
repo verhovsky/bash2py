@@ -21,8 +21,13 @@
 
 #include "burp.h"
 
-int  g_burp_indent         = 0;
-int  g_burp_disable_indent = 0;
+extern int g_translate_html;
+
+void
+burp_init(burpT *burpP)
+{
+	memset(burpP, 0, sizeof(burpT));
+}
 
 static void
 increase_burp(burpT *burpP)
@@ -79,25 +84,55 @@ indentation(burpT *burpP)
 	int i;
 
 	if (burpP->m_lth && burpP->m_P[burpP->m_lth-1] == '\n') {
-		if (!g_burp_disable_indent) {
-			assert(0 <= g_burp_indent);
-			for (i = g_burp_indent * 4; i > 0; --i) {
+		if (!burpP->m_disable_indent) {
+			assert(0 <= burpP->m_indent);
+			for (i = burpP->m_indent * 4; i > 0; --i) {
 				burpc1(burpP, ' ');
 }	}	}	}
 
 void
 burpc(burpT *burpP, const char c)
 {
+	if (g_translate_html) {
+		burpP->m_ungetc = burpP->m_lth;
+		switch (c) {
+		case '<':
+			g_translate_html = 0;
+			burps(burpP, "&lt;");
+			g_translate_html = 1;
+			return;
+		case '>':
+			g_translate_html = 0;
+			burps(burpP, "&gt;");
+			g_translate_html = 1;
+			return;
+		case '&':
+			g_translate_html = 0;
+			burps(burpP, "&amp;");
+			g_translate_html = 1;
+			return;
+	}	}
 	indentation(burpP);
 	burpc1(burpP, c);
+	assert(burpP->m_lth < burpP->m_max);
+}
+
+void
+burp_ungetc(burpT *burpP)
+{
+	assert(burpP->m_ungetc < burpP->m_lth);
+	burpP->m_lth = burpP->m_ungetc;
 }
 
 void 
 burp(burpT *burpP, const char *fmtP, ...)	/* proc */
 {
+	static burpT	burp_temp = {0,0,0};
+
 	va_list	    arg;
 	size_t		size, left;
-	int			ret;
+	int			ret, c;
+	char		*P;
 	
 	va_start(arg, fmtP);
 		
@@ -108,37 +143,36 @@ burp(burpT *burpP, const char *fmtP, ...)	/* proc */
 	}
 
 	indentation(burpP);
+	burp_temp.m_lth = 0;
 	for (;;) {
-		left = burpP->m_max - burpP->m_lth;
+		left = burp_temp.m_max - burp_temp.m_lth;
 		// Caution: microsoft bug causes ret == -1 if printing any 0xFFFF character
-		if (left > 79 && (ret =  vsnprintf(burpP->m_P+burpP->m_lth, left, fmtP, arg)) < left && 0 <= ret) {
+		if (left > 79 && (ret =  vsnprintf(burp_temp.m_P+burp_temp.m_lth, left, fmtP, arg)) < left && 0 <= ret) {
 			break;
 
 		}
-		increase_burp(burpP);
+		increase_burp(&burp_temp);
 	}
-	burpP->m_lth += ret;
+	burp_temp.m_lth += ret;
 	va_end(arg);
+
+	for (P = burp_temp.m_P; c = *P; ++P) {
+		burpc(burpP, c);
+	}
  	return;
 }
 
 void
 burpn(burpT *burpP, const char *stringP, int lth)
 {
-	char	*P;
+	int	i;
 
 	assert(0 <= lth);
 	if (0 < lth) {
 		indentation(burpP);
-		while ((burpP->m_max - burpP->m_lth) < lth + 1) {
-			increase_burp(burpP);
-		}
-		P = burpP->m_P + burpP->m_lth;
-		memcpy(P, stringP, lth);
-		burpP->m_lth += lth;
-		P            += lth;
-		*P            = 0;
-	}
+		for (i = 0; i < lth; ++i) {
+			burpc(burpP, stringP[i]);
+	}	}
 	return;
 }
 
@@ -148,3 +182,12 @@ burps(burpT *burpP, const char *stringP)
 	burpn(burpP, stringP, strlen(stringP));
 }
 
+void
+burps_html(burpT *burpP, const char *stringP)
+{
+	int save = g_translate_html;
+
+	g_translate_html = 0;
+	burps(burpP, stringP);
+	g_translate_html = save;
+}

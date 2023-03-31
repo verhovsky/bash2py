@@ -115,6 +115,8 @@ extern char *this_command_name;
    call shell_reinitialize () if you need to start afresh. */
 int shell_initialized = 0;
 
+int g_translate_html = 0;
+
 COMMAND *global_command = (COMMAND *)NULL;
 
 /* Information about the current user. */
@@ -262,6 +264,7 @@ static const struct {
 #if defined (WORDEXP_OPTION)
   { "wordexp", Int, &wordexp_only, (char **)0x0 },
 #endif
+  { "html", Int, &g_translate_html, (char **)0x0 },
   { (char *)0x0, Int, (int *)0x0, (char **)0x0 }
 };
 

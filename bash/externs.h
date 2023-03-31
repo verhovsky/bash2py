@@ -38,7 +38,7 @@ extern char *named_function_string __P((char *, COMMAND *, int));
 
 extern void print_command __P((COMMAND *));
 extern void print_simple_command __P((SIMPLE_COM *));
-extern void print_word_list __P((WORD_LIST *, char *));
+extern void print_word_list __P((WORD_LIST *, char *, int));
 
 /* debugger support */
 extern void print_for_command_head __P((FOR_COM *));

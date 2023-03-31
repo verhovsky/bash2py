@@ -88,6 +88,8 @@ typedef void *alias_t;
 #  include "maxpath.h"
 #endif /* PROMPT_STRING_DECODE */
 
+#include "burp.h"
+
 #define RE_READ_TOKEN	-99
 #define NO_EXPANSION	-100
 
@@ -111,6 +113,9 @@ typedef void *alias_t;
 #if defined (EXTENDED_GLOB)
 extern int extended_glob;
 #endif
+
+extern int	 g_translate_html;
+extern burpT g_output;
 
 extern int eof_encountered;
 extern int no_line_editing, running_under_emacs;
@@ -1390,6 +1395,10 @@ yy_getc ()
   int c;
 
   c = (*(bash_input.getter))();
+
+  if (g_translate_html) {
+	burpc(&g_output, c);
+  }
   position.byte++;
   if (c == '\n') {
 	position.line++;
@@ -1406,6 +1415,9 @@ static int
 yy_ungetc (c)
      int c;
 {
+  if (g_translate_html) {
+	burp_ungetc(&g_output);
+  }
   position.byte--;
   position.column--;
   return (*(bash_input.ungetter)) (c);
@@ -1555,6 +1567,9 @@ yy_string_get ()
   if (string && *string)
     {
       c = *string++;
+      if (g_translate_html) {
+		burpc(&g_output, c);
+      }
       bash_input.location.string = string;
       return (c);
     }
@@ -1567,6 +1582,9 @@ yy_string_unget (c)
      int c;
 {
   *(--bash_input.location.string) = c;
+  if (g_translate_html) {
+	burp_ungetc(&g_output);
+  }
   return (c);
 }
 

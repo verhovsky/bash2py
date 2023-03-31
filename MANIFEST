@@ -1,0 +1,7 @@
+README.txt -- Installation instructions
+analyzers  -- Extra code
+bash       -- Source code for bash2py
+bash2py    -- Driver for bash2py
+bash2py.py -- Python driver for bash2py
+install    -- Script to build bash2py
+test_files -- A variety of files used to test

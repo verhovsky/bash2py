@@ -50,6 +50,8 @@
 	#include "translate.h"
 #endif
 
+#include "burp.h"
+
 extern int EOF_reached;
 extern int indirection_level;
 extern int posixly_correct;
@@ -59,6 +61,9 @@ extern int need_here_doc;
 extern int current_command_number, current_command_line_count;
 extern int expand_aliases;
 extern int token_cnt;
+
+extern int	 g_translate_html;
+extern burpT g_output;
 
 static void send_pwd_to_eterm __P((void));
 static sighandler alrm_catcher __P((int));
@@ -243,7 +248,13 @@ parse_command ()
 
   current_command_line_count = 0;
   token_cnt = 0;
+  if (g_translate_html) {
+	burps_html(&g_output, "<tr><td><pre>");
+  }
   r = yyparse ();
+  if (g_translate_html) {
+	burps_html(&g_output, "</pre></td><td></td></tr>\n");
+  }
 
   if (need_here_doc)
     gather_here_documents ();

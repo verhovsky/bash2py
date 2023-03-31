@@ -1,35 +1,41 @@
 import os, sys
 import pdb
 
-def translate(bashFileName):
-	os.system('bash/bash2pyengine ' + bashFileName)
+def translate(bashFileName, html):
+	os.system('bash/bash2pyengine ' + html + bashFileName)
 
 def helpx():
-	print("Usage:\n./bash2py -d <dir_name>\n./bash2py -f <file_name>\n./bash2py <name>\n")
+	print("Usage:\n./bash2py [-h] [-d] <dir_name>\n./bash2py [-h] [-f] <file_name>\n")
 
 def main():
 
-	option = ' '
-	if (len(sys.argv) == 2):
-		bashFileName = sys.argv[1]
+	html   = ''
+	option = ''
+
+	lth = len(sys.argv);
+	bashFileName = sys.argv[lth-1];
+	for i in range(1,lth - 1) :
+		if (sys.argv[i] == '-f' or sys.argv[i] == '-d') :
+			option = sys.argv[i]
+		elif (sys.argv[i] == '-h') :
+			html   = ' --html '
+	
+	if (option == ''):
 		if (os.path.isdir(bashFileName)) :
 			option = '-d'
 		else :
 			option = '-f'
-	elif (len(sys.argv) == 3):
-		option = sys.argv[1]
-		bashFileName = sys.argv[2]
 
 	if (option == '-f'):
-		translate(bashFileName)
+		translate(bashFileName, html)
 		exit(0)
 		
 	if(option == '-d'):
 		for dirname, subDirs, files in os.walk(bashFileName):
 			for f in files:
-				if not f.endswith(".py"):
+				if not f.endswith(".py") and not f.endswith(".html"):
 					bashFileName1 = os.path.join(dirname, f)
-					translate(bashFileName1)
+					translate(bashFileName1, html)
 		exit(0)
 
 	helpx()

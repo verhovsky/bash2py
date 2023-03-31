@@ -1,4 +1,4 @@
-Current version: 2.0
+Current version: 2.2
 
 Bash2py is a tool designed to automate the translation from Bash to Python.
 
@@ -18,16 +18,21 @@ Run bash2py in any of the following ways:
 
 1. Using the front end interface to invoke bash2pyengine
 	
-	./bash2py -f <SCRIPT>
-	./bash2py -d <DIRECTORY>
-    ./bash2py <SCRIPT|DIRECTORY>
+	./bash2py [-h] -f <SCRIPT>
+	./bash2py [-h] -d <DIRECTORY>
+    ./bash2py [-h] <SCRIPT|DIRECTORY>
 
 2. Invoking this engine directly
 
-	./bash/bash2pyengine <SCRIPT>
+	./bash/bash2pyengine [--html] <SCRIPT>
 	
+If the -h/--html option is specified a comparative before and after translation
+html file is generated rather than a python file. This is useful for observing
+the details of the translation process.
+
 <SCRIPT> is replaced by the name of the script you want to translate, and <DIRECTORY> is the name of the directory you want to recursively translate.
 
-Bash2py will put the translated Python file in the same directory as the corresponding Bash file, with the same name, but with a .py extension.
+Bash2py will put the translated Python file in the same directory as the corresponding Bash file, with the same name, but with a .py extension. HTML files will
+be assigned a .html extension.
 	
 Note: Bash2py is not perfect. You will have to review and edit the translated file by hand, to fix any errors that bash2py made in translation.
