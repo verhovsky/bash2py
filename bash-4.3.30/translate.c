@@ -1292,6 +1292,11 @@ print_test_command(WORD_LIST *word_listP, int negated)
 				goto done;
 			}
 			break;
+		case '!':
+			if (!wordP[1]) {
+				burps(&g_output, "not ");
+				break;
+      }
 		case '(':
 			if (!wordP[1]) {
 				burpc(&g_output, c);
@@ -1321,21 +1326,27 @@ print_test_command(WORD_LIST *word_listP, int negated)
 				}	}
 				break;
 			} 
-			if (!operatorP && c == '-') {
-				operatorP = wordP;
-			} else {
-				if (!operatorP) {
+			if (!operatorP) {
+        switch (c) {
+        case '-':
+        case '!':
+        case '=':
+        case '<':
+				case '>':
+				  operatorP = wordP;
+					continue;
+        default:
 					// Very strange
 					operatorP = "";
-				}
-				if (seen) {
-					burpc(&g_output, ' ');
-				}
-				translate_binary_operation(operatorP, 0, leftP, 0, wordP);
-				++seen;
-				operatorP = 0;
-				leftP     = 0;
+					continue;
+			}	}
+			if (seen) {
+				burpc(&g_output, ' ');
 			}
+			translate_binary_operation(operatorP, 0, leftP, 0, wordP);
+			++seen;
+			operatorP = 0;
+			leftP     = 0;
 			break;
 		}
 	}

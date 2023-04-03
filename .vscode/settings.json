@@ -1,0 +1,8 @@
+{
+    "files.associations": {
+        "bashtypes.h": "c",
+        "shell.h": "c",
+        "bashhist.h": "c",
+        "translate.h": "c"
+    }
+}

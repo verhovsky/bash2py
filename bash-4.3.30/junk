@@ -1,0 +1,7 @@
+#The statement below also gets interpreted incorrectly. 
+#believe the desired output would be:
+#if (OPTION.val != "1")
+if [ "$OPTION" != "1" ]; then
+  echo "Option is disabled"
+fi
+
