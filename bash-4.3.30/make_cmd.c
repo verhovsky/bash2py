@@ -911,6 +911,9 @@ make_redirection (source, instruction, dest_and_filename, flags)
   temp->instruction = instruction;
   temp->flags = 0;
   temp->rflags = flags;
+#ifdef BASH2PY
+  temp->position =  dest_and_filename.filename->position;
+#endif
   temp->next = (REDIRECT *)NULL;
 
   switch (instruction)

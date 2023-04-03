@@ -178,30 +178,22 @@ REDIRECT *redirect;
 	}
 
 	/* If the here document delimiter is quoted, single-quote it. */
-	if (redirect->redirectee.filename->flags & W_QUOTED) {
-		x = sh_single_quote (redirect->here_doc_eof);
-		burps(&g_output, "<<");
-		if (kill_leading) {
-			burpc(&g_output, '-');
-		}
-		burps(&g_output, x);
-		xfree (x);
-	} else {
-		burps(&g_output, "<<");
-		if (kill_leading) {
-			burpc(&g_output, '-');
-		}
-		burps(&g_output, redirect->here_doc_eof);
-	}
+	burps(&g_output, "print '''");
 }
 
 static void
 print_heredoc_body (redirect)
 REDIRECT *redirect;
 {
+	int disable_indent;
+
 	/* Here doc body */
 	burps(&g_output, redirect->redirectee.filename->word);
-	burps(&g_output, redirect->here_doc_eof);
+
+	disable_indent = g_output.m_disable_indent;
+	g_output.m_disable_indent = 1;
+	burps(&g_output, "'''");
+	g_output.m_disable_indent = disable_indent;
 }
 
 static void
@@ -469,13 +461,13 @@ print_redirection_list (REDIRECT *redirects)
 }
 
 static void
-handle_redirection_list (COMMAND *commandP)
+handle_redirection_list (REDIRECT **redirectsPP)
 {
 	REDIRECT **redirectPP, *redirectP, *heredocs, *hdtail, *newredir;
 	int redirector, redir_fd;
 	WORD_DESC *redirectee, *redir_word;
 
-	for (redirectPP = &commandP->redirects; redirectP = *redirectPP; ){
+	for (redirectPP = redirectsPP; redirectP = *redirectPP; ){
 
 		redirectee = redirectP->redirectee.filename;
 		redir_fd   = redirectP->redirectee.dest;
@@ -1533,7 +1525,7 @@ print_declare_command(WORD_LIST	*word_listP)
 static void
 print_echo_command(WORD_LIST *word_listP, REDIRECT *redirects)
 {
-	char		*wordP;
+	char		*wordP, *P, *P1;
 	int			n_flag, e_flag;
 	fix_typeE	got;
 	
@@ -1556,6 +1548,11 @@ print_echo_command(WORD_LIST *word_listP, REDIRECT *redirects)
 	burps(&g_output, "print(");
 	for (; word_listP; word_listP = word_listP->next) {
 		wordP = word_listP->word->word;
+		// For some bizarre reason 0x1 appears as 0x1 0x1 (perhaps escaped??)
+		for (P = P1 = wordP; *P++ = *P1++; ) {
+			if (*P == 1 && P[-1] == 1) {
+				++P1;
+		}	}
 		wordP = fix_string(wordP, FIX_VAR, &got);
 		burps(&g_output, wordP);
 		if (word_listP->next) {
@@ -2843,7 +2840,7 @@ emit_command (COMMAND *command)
 		assert(0 <= command->position.byte);
 		print_comments(command->position.byte);
 
-		handle_redirection_list(command);
+		handle_redirection_list(&command->redirects);
 		if (command->flags & CMD_TIME_PIPELINE) {
 			UNCHANGED;
 			burps(&g_output, "time ");
@@ -2872,6 +2869,7 @@ emit_command (COMMAND *command)
 		switch (command->type) {
 		case cm_simple:
 			print_simple_command (command->value.Simple);
+        	handle_redirection_list(&command->value.Simple->redirects);
 			break;
 
 		case cm_for:
