@@ -689,7 +689,7 @@ has_equal_sign(SIMPLE_COM *simple_command)
 }
 
 static void
-print_popen_flags(REDIRECT *redirects)
+print_popen_flags(REDIRECT *redirects, int printing)
 {
 	fix_typeE	got;
 	char		*wordP;
@@ -724,7 +724,11 @@ print_popen_flags(REDIRECT *redirects)
 		case r_output_force:
 			switch (redirects->redirector.dest) {
 			case 1:
-				burps(&g_output, ",stdout");
+				if (printing) {
+					burps(&g_output, ",file");
+				} else {
+					burps(&g_output, ",stdout");
+				}
 				break;
 			case 2:
 				burps(&g_output, ",stderr");
@@ -743,7 +747,11 @@ print_popen_flags(REDIRECT *redirects)
 		case r_appending_to:
 			switch (redirects->redirector.dest) {
 			case 1:
-				burps(&g_output, ",stdout");
+				if (printing) {
+					burps(&g_output, ",file");
+				} else {
+					burps(&g_output, ",stdout");
+				}
 				break;
 			case 2:
 				burps(&g_output, ",stderr");
@@ -1221,6 +1229,7 @@ char *separator;
 		return;
 	}
 
+	g_translate.m_uses.m_print = 1;
 	burps(&g_output, "print( ");
 	wordP = fix_string(wordP, FIX_STRING, &got);
 	burps(&g_output, wordP);
@@ -1478,6 +1487,7 @@ print_declare_command(WORD_LIST	*word_listP)
 			if (!strcmp(wordP, "-p")) {
 				if (separator == -1) {
 					separator = 0;
+					g_translate.m_uses.m_print = 1;
 					burps(&g_output, "print(");
 				}
 			} else if (!strcmp(wordP, "-i")) {
@@ -1542,6 +1552,7 @@ print_echo_command(WORD_LIST *word_listP, REDIRECT *redirects)
 		break;
 	}
 	
+	g_translate.m_uses.m_print = 1;
 	burps(&g_output, "print(");
 	for (; word_listP; word_listP = word_listP->next) {
 		wordP = word_listP->word->word;
@@ -1554,7 +1565,7 @@ print_echo_command(WORD_LIST *word_listP, REDIRECT *redirects)
 		/* Only works with python 3 */
 		burps(&g_output, ",end=\"\"");
 	}
-	print_popen_flags(redirects);
+	print_popen_flags(redirects, 1);
 	burpc(&g_output, ')');
 	return;
 }
@@ -1633,6 +1644,7 @@ print_read_command(WORD_LIST *word_listP)
 		break;
 	}
 	if (promptP) {
+		g_translate.m_uses.m_print = 1;
 		burp(&g_output, "print(%s,end=\"\")\n", promptP);
 	}
 	if (targetP) {
@@ -1713,6 +1725,7 @@ print_umask_command(WORD_LIST *word_listP)
 		// Return the value of umask
 		burp(&g_output, "_rc%d = os.umask(0)\n", g_rc_identifier);
 		burp(&g_output, "os.umask(_rc%d)\n", g_rc_identifier);
+		g_translate.m_uses.m_print = 1;
 		burp(&g_output,"print(oct(_rc%d))", g_rc_identifier);
 		return;
 	}
@@ -2004,6 +2017,7 @@ print_simple_command (SIMPLE_COM *simple_command)
 	
 		if (!strcmp(wordP, "pwd")){
 			g_translate.m_uses.m_os = 1;
+			g_translate.m_uses.m_print = 1;
 			burps(&g_output, "print(os.getcwd())");
 			return;
 		} 
@@ -2103,7 +2117,7 @@ print_simple_command (SIMPLE_COM *simple_command)
 				burps(&g_output, " + \" \" + ");
 		}	}
 		burps(&g_output, ",shell=True");
-		print_popen_flags(simple_command->redirects);
+		print_popen_flags(simple_command->redirects, 0);
 		burps(&g_output, ")\n");
 		communicates = print_popen_redirection_list(simple_command->redirects);
 		if (communicates) {
@@ -3126,61 +3140,74 @@ emitUses(void)
 {
 	int	separator = ' ';
 
-	if (allzero(&g_translate.m_uses, sizeof(g_translate.m_uses))) {
-		goto skip;
+	if (g_translate.m_uses.m_print) {
+		if (g_translate_html) {
+			fprintf(outputF, "<tr><td></td><td>");
+		}
+		fprintf(outputF, "from __future__ import print_function");
+		if (g_translate_html) {
+			fprintf(outputF, "</td></tr>");
+		}
+		fprintf(outputF, "\n");
 	}
 
-	if (g_translate_html) {
-		fprintf(outputF, "<tr><td></td><td>");
-	}
-	fprintf(outputF, "import");
-	if (g_translate.m_uses.m_sys) {
-		fprintf(outputF, " sys");
-		separator = ',';
-	}
-	if (g_translate.m_uses.m_os) {
-		fprintf(outputF, "%cos", separator);
-		separator = ',';
-	}
-	if (g_translate.m_uses.m_subprocess) {
-		fprintf(outputF, "%csubprocess", separator);
-		separator = ',';
-	}
-	if (g_translate.m_uses.m_signal) {
-		fprintf(outputF, "%csignal", separator);
-		separator = ',';
-	}
-	if (g_translate.m_uses.m_threading) {
-		fprintf(outputF, "%cthreading", separator);
-		separator = ',';
-	}
-	if (g_translate.m_uses.m_glob) {
-		fprintf(outputF, "%cglob", separator);
-		separator = ',';
-	}
-	if (g_translate.m_uses.m_re) {
-		fprintf(outputF, "%cre", separator);
-		separator = ',';
-	}
+	if (g_translate.m_uses.m_sys ||
+		g_translate.m_uses.m_os  ||
+		g_translate.m_uses.m_subprocess  ||
+		g_translate.m_uses.m_signal      ||
+		g_translate.m_uses.m_threading   ||
+		g_translate.m_uses.m_glob        ||
+		g_translate.m_uses.m_re) {
 
-	if (g_translate_html) {
-		fprintf(outputF, "</td></tr>");
+		if (g_translate_html) {
+			fprintf(outputF, "<tr><td></td><td>");
+		}
+		fprintf(outputF, "import");
+		if (g_translate.m_uses.m_sys) {
+			fprintf(outputF, " sys");
+			separator = ',';
+		}
+		if (g_translate.m_uses.m_os) {
+			fprintf(outputF, "%cos", separator);
+			separator = ',';
+		}
+		if (g_translate.m_uses.m_subprocess) {
+			fprintf(outputF, "%csubprocess", separator);
+			separator = ',';
+		}
+		if (g_translate.m_uses.m_signal) {
+			fprintf(outputF, "%csignal", separator);
+			separator = ',';
+		}
+		if (g_translate.m_uses.m_threading) {
+			fprintf(outputF, "%cthreading", separator);
+			separator = ',';
+		}
+		if (g_translate.m_uses.m_glob) {
+			fprintf(outputF, "%cglob", separator);
+			separator = ',';
+		}
+		if (g_translate.m_uses.m_re) {
+			fprintf(outputF, "%cre", separator);
+			separator = ',';
+		}
+	
+		if (g_translate_html) {
+			fprintf(outputF, "</td></tr>");
+		}
+		fprintf(outputF, "\n");
 	}
-	fprintf(outputF, "\n");
-
-skip:
-	if (!g_translate.m_uses.m_stat) {
-		return;
+	
+	if (g_translate.m_uses.m_stat) {
+		if (g_translate_html) {
+			fprintf(outputF, "<tr><td></td><td>");
+		}
+		fprintf(outputF, "from stat import *");
+		if (g_translate_html) {
+			fprintf(outputF, "</td></tr>");
+		}
+		fprintf(outputF, "\n");
 	}
-
-	if (g_translate_html) {
-		fprintf(outputF, "<tr><td></td><td>");
-	}
-	fprintf(outputF, "from stat import *");
-	if (g_translate_html) {
-		fprintf(outputF, "</td></tr>");
-	}
-	fprintf(outputF, "\n");
 }
 	
 static void

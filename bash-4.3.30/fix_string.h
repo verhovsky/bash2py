@@ -22,6 +22,7 @@ typedef struct {
 		int m_glob;
 		int m_re;
 		int	m_stat;
+		int m_print;
 	} m_uses;
 	// Basic functions needed
 	struct functionS {
