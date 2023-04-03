@@ -111,6 +111,10 @@ extern char *this_command_name;
    call shell_reinitialize () if you need to start afresh. */
 int shell_initialized = 0;
 
+#ifdef BASH2PY
+extern int g_translate_html;
+#endif
+
 COMMAND *global_command = (COMMAND *)NULL;
 
 /* Information about the current user. */
@@ -264,6 +268,9 @@ static const struct {
 #if defined (WORDEXP_OPTION)
   { "wordexp", Int, &wordexp_only, (char **)0x0 },
 #endif
+#ifdef BASH2PY
+  { "html", Int, &g_translate_html, (char **)0x0 },
+#endif
   { (char *)0x0, Int, (int *)0x0, (char **)0x0 }
 };
 
@@ -360,6 +367,9 @@ main (argc, argv, env)
 {
   register int i;
   int code, old_errexit_flag;
+#ifdef BASH2PY
+  const char *shell_scriptP = 0;
+#endif
 #if defined (RESTRICTED_SHELL)
   int saverst;
 #endif
@@ -703,6 +713,9 @@ main (argc, argv, env)
      default_input as appropriate. */
   if (arg_index != argc && read_from_stdin == 0)
     {
+#ifdef BASH2PY
+      shell_scriptP = argv[arg_index];
+#endif
       open_shell_script (argv[arg_index]);
       arg_index++;
     }
@@ -752,7 +765,13 @@ main (argc, argv, env)
   shell_initialized = 1;
 
   /* Read commands until exit condition. */
+#ifdef BASH2PY
+  initialize_translator(shell_scriptP);
+#endif
   reader_loop ();
+#ifdef BASH2PY
+  close_translator();
+#endif
   exit_shell (last_command_exit_value);
 }
 
@@ -1349,7 +1368,11 @@ bind_args (argv, arg_start, arg_end, start_index)
   WORD_LIST *args;
 
   for (i = arg_start, args = (WORD_LIST *)NULL; i < arg_end; i++)
-    args = make_word_list (make_word (argv[i]), args);
+    args = make_word_list (make_word (argv[i]
+#ifdef BASH2PY
+                                             , 0
+#endif
+                                             ), args);
   if (args)
     {
       args = REVERSE_LIST (args, WORD_LIST *);

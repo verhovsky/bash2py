@@ -144,9 +144,9 @@ LOCAL_LDFLAGS = @LOCAL_LDFLAGS@
 SYSTEM_FLAGS = -DPROGRAM='"$(Program)"' -DCONF_HOSTTYPE='"$(Machine)"' -DCONF_OSTYPE='"$(OS)"' -DCONF_MACHTYPE='"$(MACHTYPE)"' -DCONF_VENDOR='"$(VENDOR)"' $(LOCALE_DEFS)
 
 BASE_CCFLAGS = $(PROFILE_FLAGS) $(SYSTEM_FLAGS) $(LOCAL_DEFS) \
-	  $(DEFS) $(LOCAL_CFLAGS) $(INCLUDES)
+	  $(DEFS) $(LOCAL_CFLAGS) $(INCLUDES) $(MAKEBASH2PY)
 
-CCFLAGS = $(BASE_CCFLAGS) $(CPPFLAGS) $(CFLAGS)
+CCFLAGS = $(BASE_CCFLAGS) $(CPPFLAGS) $(CFLAGS) 
 
 CCFLAGS_FOR_BUILD = $(BASE_CCFLAGS) $(CPPFLAGS_FOR_BUILD) $(CFLAGS_FOR_BUILD)
 
@@ -156,7 +156,7 @@ LDFLAGS_FOR_BUILD = @LDFLAGS_FOR_BUILD@ $(LOCAL_LDFLAGS) $(CFLAGS_FOR_BUILD)
 INCLUDES = -I. @RL_INCLUDE@ -I$(srcdir) -I$(BASHINCDIR) -I$(LIBSRC) $(INTL_INC)
 
 # Maybe add: -Wextra
-GCC_LINT_FLAGS = -O -Wall -Wshadow -Wpointer-arith -Wcast-qual -Wno-parentheses \
+GCC_LINT_FLAGS = -Wall -Wshadow -Wpointer-arith -Wcast-qual -Wno-parentheses \
 		 -Wcast-align -Wstrict-prototypes -Wconversion -Wformat \
 		 -Wformat-nonliteral -Wmissing-braces -Wuninitialized \
 		 -Wmissing-declarations  -Winline \
@@ -424,6 +424,7 @@ LIBRARY_LDFLAGS = $(READLINE_LDFLAGS) $(HISTORY_LDFLAGS) $(GLOB_LDFLAGS) \
 
 # The main source code for the Bourne Again SHell.
 CSOURCES = shell.c eval.c parse.y general.c make_cmd.c print_cmd.c y.tab.c \
+       burp.c translate_expr.c fix_string.c translate.c \
 	   dispose_cmd.c execute_cmd.c variables.c $(GLOBC) version.c \
 	   expr.c copy_cmd.c flags.c subst.c hashcmd.c hashlib.c mailcheck.c \
 	   test.c trap.c alias.c jobs.c nojobs.c $(ALLOC_FILES) braces.c \
@@ -452,7 +453,9 @@ SIGLIST_O = @SIGLIST_O@
 SIGNAMES_O = @SIGNAMES_O@
 
 # Matching object files.
-OBJECTS	 = shell.o eval.o y.tab.o general.o make_cmd.o print_cmd.o $(GLOBO) \
+OBJECTS	 = shell.o eval.o y.tab.o general.o make_cmd.o \
+	   burp.o translate_expr.o fix_string.o translate.o \
+	   print_cmd.o $(GLOBO) \
 	   dispose_cmd.o execute_cmd.o variables.o copy_cmd.o error.o \
 	   expr.o flags.o $(JOBS_O) subst.o hashcmd.o hashlib.o mailcheck.o \
 	   trap.o input.o unwind_prot.o pathexp.o sig.o test.o version.o \
@@ -589,6 +592,17 @@ bashversion$(EXEEXT):	patchlevel.h conftypes.h version.h buildversion.o $(SUPPOR
 
 buildversion.o: version.h conftypes.h patchlevel.h $(srcdir)/version.c
 	$(CC_FOR_BUILD) $(CCFLAGS_FOR_BUILD) -DBUILDTOOL -c -o $@ $(srcdir)/version.c
+
+bash2pyengine: .made
+	mv bash bash2pyengine
+	cp bash2pyengine ~/bin/bash2pyengine
+
+fix_string: burp.o translate_expr.o fix_string.c
+	gcc -o fix_string -g -DTEST -DBASH2PY burp.o translate_expr.o fix_string.c
+
+translate_expr: burp.o fix_string translate_expr.c
+	gcc -c -g -DTEST -DBASH2PY -DSKIPMAIN fix_string.c
+	gcc -o translate_expr -g -DTEST -DBASH2PY burp.o fix_string.o translate_expr.c
 
 # old rules
 GRAM_H = parser-built
@@ -795,7 +809,7 @@ LIB_SUBDIRS = ${RL_LIBDIR}  ${HIST_LIBDIR} ${TERM_LIBDIR} ${GLOB_LIBDIR} \
 		${INTL_LIBDIR} ${TILDE_LIBDIR} ${ALLOC_LIBDIR} ${SH_LIBDIR}
 
 basic-clean:
-	$(RM) $(OBJECTS) $(Program) bashbug
+	$(RM) $(OBJECTS) $(Program) bashbug bash2pyengine
 	$(RM) .build .made version.h 
 
 clean:	basic-clean

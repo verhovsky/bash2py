@@ -1370,7 +1370,10 @@ assign_lineno (var, value, unused, key)
 
   if (value == 0 || *value == '\0' || legal_number (value, &new_value) == 0)
     new_value = 0;
-  line_number = line_number_base = new_value;
+  line_number = new_value;
+#ifndef BASH2PY
+  line_number_base = new_value;
+#endif
   return var;
 }
 

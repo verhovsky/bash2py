@@ -112,16 +112,35 @@ enum command_type { cm_for, cm_case, cm_while, cm_if, cm_simple, cm_select,
 #define SUBSHELL_COPROC	0x40	/* subshell from a coproc pipeline */
 #define SUBSHELL_RESETTRAP 0x80	/* subshell needs to reset trap strings on first call to trap */
 
+#ifdef BASH2PY
+typedef struct {
+  int line;
+  int column;
+  int byte;
+} POSITION;
+
+typedef struct {
+  int      value;
+  POSITION position;
+} PNUMBER;
+#endif
+
 /* A structure which represents a word. */
 typedef struct word_desc {
   char *word;		/* Zero terminated string. */
   int flags;		/* Flags associated with this word. */
+#ifdef BASH2PY
+  POSITION position;
+#endif
 } WORD_DESC;
 
 /* A linked list of words. */
 typedef struct word_list {
   struct word_list *next;
   WORD_DESC *word;
+#ifdef BASH2PY
+  POSITION position;
+#endif
 } WORD_LIST;
 
 
@@ -151,6 +170,9 @@ typedef struct redirect {
   enum r_instruction  instruction; /* What to do with the information. */
   REDIRECTEE redirectee;	/* File descriptor or filename */
   char *here_doc_eof;		/* The word that appeared in <<foo. */
+#ifdef BASH2PY
+  POSITION position;
+#endif
 } REDIRECT;
 
 /* An element used in parsing.  A single word or a single redirection.
@@ -158,6 +180,10 @@ typedef struct redirect {
 typedef struct element {
   WORD_DESC *word;
   REDIRECT *redirect;
+#ifdef BASH2PY
+  int line;
+  POSITION position;
+#endif
 } ELEMENT;
 
 /* Possible values for command->flags. */
@@ -175,6 +201,9 @@ typedef struct element {
 #define CMD_COMMAND_BUILTIN 0x0800 /* command executed by `command' builtin */
 #define CMD_COPROC_SUBSHELL 0x1000
 #define CMD_LASTPIPE	    0x2000
+#ifdef BASH2PY
+#define CMD_ELIF            0x4000
+#endif
 
 /* What a command looks like. */
 typedef struct command {
@@ -206,6 +235,9 @@ typedef struct command {
     struct subshell_com *Subshell;
     struct coproc_com *Coproc;
   } value;
+#ifdef BASH2PY
+  POSITION position;
+#endif
 } COMMAND;
 
 /* Structure used to represent the CONNECTION type. */
@@ -228,6 +260,9 @@ typedef struct pattern_list {
   WORD_LIST *patterns;		/* Linked list of patterns to test. */
   COMMAND *action;		/* Thing to execute if a pattern matches. */
   int flags;
+#ifdef BASH2PY
+  POSITION position;
+#endif
 } PATTERN_LIST;
 
 /* The CASE command. */
@@ -314,6 +349,9 @@ typedef struct cond_com {
   int type;
   WORD_DESC *op;
   struct cond_com *left, *right;
+#ifdef BASH2PY
+  POSITION position;
+#endif
 } COND_COM;
 
 /* The "simple" command.  Just a collection of words and redirects. */
@@ -332,6 +370,9 @@ typedef struct function_def {
   WORD_DESC *name;		/* The name of the function. */
   COMMAND *command;		/* The parsed execution tree. */
   char *source_file;		/* file in which function was defined, if any */
+#ifdef BASH2PY
+  POSITION position;
+#endif
 } FUNCTION_DEF;
 
 /* A command that is `grouped' allows pipes and redirections to affect all

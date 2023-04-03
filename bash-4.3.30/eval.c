@@ -45,14 +45,27 @@
 #  include "bashhist.h"
 #endif
 
+#ifdef BASH2PY
+#include "translate.h"
+#include "burp.h"
+#endif
+
 extern int EOF_reached;
 extern int indirection_level;
 extern int posixly_correct;
 extern int subshell_environment, running_under_emacs;
 extern int last_command_exit_value, stdin_redir;
 extern int need_here_doc;
-extern int current_command_number, current_command_line_count, line_number;
+extern int current_command_number, current_command_line_count;
+#ifndef BASH2PY
+extern int line_number;
+#endif
 extern int expand_aliases;
+
+#ifdef BASH2PY
+extern int g_translate_html;
+extern burpT g_output;
+#endif
 
 #if defined (HAVE_POSIX_SIGNALS)
 extern sigset_t top_level_mask;
@@ -157,7 +170,11 @@ reader_loop ()
 
 	      executing = 1;
 	      stdin_redir = 0;
+#ifdef BASH2PY
+		  print_translation(current_command);
+#else
 	      execute_command (current_command);
+#endif
 
 	    exec_done:
 	      QUIT;
@@ -235,7 +252,18 @@ parse_command ()
     }
 
   current_command_line_count = 0;
+#ifdef BASH2PY
+  if (g_translate_html) {
+    burps_html(&g_output, "<tr><td><pre>");
+  }
+#endif
   r = yyparse ();
+#ifdef BASH2PY
+  if (g_translate_html) {
+       burps_html(&g_output, "</pre></td><td></td></tr>\n");
+  }       
+#endif
+ 
 
   if (need_here_doc)
     gather_here_documents ();

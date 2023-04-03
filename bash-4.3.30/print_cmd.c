@@ -137,6 +137,7 @@ static int group_command_nesting;
 static char *indirection_string = 0;
 static int indirection_stringsiz = 0;
 
+#ifndef BASH2PY
 /* Print COMMAND (a command tree) on standard output. */
 void
 print_command (command)
@@ -342,6 +343,7 @@ make_command_string_internal (command)
 	}
     }
 }
+#endif // !BASH2PY
 
 static void
 _print_word_list (list, separator, pfunc)
@@ -551,6 +553,7 @@ xtrace_print_word_list (list, xtflags)
   fflush (xtrace_fp);
 }
 
+#ifndef BASH2PY
 static void
 command_print_word_list (list, separator)
      WORD_LIST *list;
@@ -566,6 +569,7 @@ print_for_command_head (for_command)
   cprintf ("for %s in ", for_command->name->word);
   command_print_word_list (for_command->map_list, " ");
 }
+#endif	// !BASH2PY
 
 void
 xtrace_print_for_command_head (for_command)
@@ -577,6 +581,7 @@ xtrace_print_for_command_head (for_command)
   xtrace_print_word_list (for_command->map_list, 0);
 }
 
+#ifndef BASH2PY
 static void
 print_for_command (for_command)
      FOR_COM *for_command;
@@ -624,6 +629,8 @@ print_select_command_head (select_command)
   cprintf ("select %s in ", select_command->name->word);
   command_print_word_list (select_command->map_list, " ");
 }
+#endif
+#endif // !BASH2PY
 
 void
 xtrace_print_select_command_head (select_command)
@@ -635,6 +642,8 @@ xtrace_print_select_command_head (select_command)
   xtrace_print_word_list (select_command->map_list, 0);
 }
 
+#ifndef BASH2PY
+#if defined(SELECT_COMMAND)
 static void
 print_select_command (select_command)
      SELECT_COM *select_command;
@@ -696,6 +705,7 @@ print_case_command_head (case_command)
 {
   cprintf ("case %s in ", case_command->word->word);
 }
+#endif	// !BASH2PY
 
 void
 xtrace_print_case_command_head (case_command)
@@ -706,6 +716,7 @@ xtrace_print_case_command_head (case_command)
   fprintf (xtrace_fp, "case %s in\n", case_command->word->word);
 }
 
+#ifndef BASH2PY
 static void
 print_case_command (case_command)
      CASE_COM *case_command;
@@ -811,7 +822,7 @@ print_arith_command (arith_cmd_list)
   command_print_word_list (arith_cmd_list, " ");
   cprintf ("))");
 }
-#endif
+#endif	// DPAREN_ARITHMETIC
 
 #if defined (COND_COMMAND)
 static void
@@ -893,8 +904,11 @@ debug_print_cond_command (cond)
   print_cond_command (cond);
   fprintf (stderr, "%s\n", the_printed_command);
 }
-#endif
+#endif	// DEBUG
+#endif	// COND_COMMAND
+#endif	// !BASH2PY
 
+#ifdef COND_COMMAND
 void
 xtrace_print_cond_term (type, invert, op, arg1, arg2)
      int type, invert;
@@ -945,6 +959,7 @@ xtrace_print_arith_cmd (list)
 }
 #endif
 
+#ifndef BASH2PY
 void
 print_simple_command (simple_command)
      SIMPLE_COM *simple_command;
@@ -1181,7 +1196,7 @@ print_redirection (redirect)
 	  free (x);
 	}
       else
-#endif
+#endif	// 0
 	cprintf ("<<< %s", redirect->redirectee.filename->word);
       break;
 
@@ -1310,6 +1325,7 @@ print_function_def (func)
 
   dispose_command (cmdcopy);
 }
+#endif	// !BASH2PY
 
 /* Return the string representation of the named function.
    NAME is the name of the function.
@@ -1323,6 +1339,9 @@ named_function_string (name, command, flags)
      COMMAND *command;
      int flags;
 {
+#ifdef BASH2PY
+	return 0;
+#else
   char *result;
   int old_indent, old_amount;
   COMMAND *cmdcopy;
@@ -1405,8 +1424,10 @@ named_function_string (name, command, flags)
     result = remove_quoted_escapes (result);
 
   return (result);
+#endif	// !BASH2PY
 }
 
+#ifndef BASH2PY
 static void
 newline (string)
      char *string;
@@ -1443,6 +1464,7 @@ semicolon ()
     return;
   cprintf (";");
 }
+#endif // !BASH2PY
 
 /* How to make the string. */
 static void
@@ -1569,7 +1591,7 @@ xprintf (const char *format, ...)
 xprintf (format, va_alist)
      const char *format;
      va_dcl
-#endif
+#endif	// PREFER_STDARG
 {
   va_list args;
 

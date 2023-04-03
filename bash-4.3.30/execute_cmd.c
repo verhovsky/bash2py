@@ -4212,7 +4212,11 @@ run_builtin:
 
   if (autocd && interactive && words->word && is_dirname (words->word->word))
     {
-      words = make_word_list (make_word ("cd"), words);
+      words = make_word_list (make_word ("cd"
+#ifdef BASH2PY
+                                             ,0
+#endif
+                                              ), words);
       xtrace_print_word_list (words, 0);
       goto run_builtin;
     }
@@ -4988,7 +4992,11 @@ execute_disk_command (words, redirects, command_line, pipe_in, pipe_out,
 	  kill_current_pipeline ();
 #endif
 
-	  wl = make_word_list (make_word (NOTFOUND_HOOK), words);
+	  wl = make_word_list (make_word (NOTFOUND_HOOK
+#ifdef BASH2PY
+                                                   ,0
+#endif
+                                                   ), words);
 	  exit (execute_shell_function (hookf, wl));
 	}
 

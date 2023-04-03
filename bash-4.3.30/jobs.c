@@ -154,7 +154,10 @@ extern int killpg __P((pid_t, int));
 typedef int sh_job_map_func_t __P((JOB *, int, int, int));
 
 /* Variables used here but defined in other files. */
-extern int subshell_environment, line_number;
+extern int subshell_environment;
+#ifndef BASH2PY
+extern int line_number;
+#endif
 extern int posixly_correct, shell_level;
 extern int last_command_exit_value, last_command_exit_signal;
 extern int loop_level, breaking;
@@ -167,6 +170,10 @@ extern sigset_t top_level_mask;
 extern procenv_t wait_intr_buf;
 extern int wait_signal_received;
 extern WORD_LIST *subst_assign_varlist;
+
+#ifdef BASH2PY
+extern POSITION position;
+#endif
 
 static struct jobstats zerojs = { -1L, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NO_JOB, NO_JOB, 0, 0 };
 struct jobstats js = { -1L, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NO_JOB, NO_JOB, 0, 0 };
@@ -3709,7 +3716,11 @@ notify_of_job_status ()
 		  signal_is_trapped (termsig) == 0)
 		{
 		  /* Don't print `0' for a line number. */
+#ifdef BASH2PY
+		  fprintf (stderr, _("%s: line %d: "), get_name_for_error (), (position.line == 0) ? 1 : position.line);
+#else
 		  fprintf (stderr, _("%s: line %d: "), get_name_for_error (), (line_number == 0) ? 1 : line_number);
+#endif
 		  pretty_print_job (job, JLIST_NONINTERACTIVE, stderr);
 		}
 	      else if (IS_FOREGROUND (job))

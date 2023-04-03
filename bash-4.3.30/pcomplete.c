@@ -1057,20 +1057,36 @@ build_arg_list (cmd, cname, text, lwords, ind)
   int i;
 
   ret = (WORD_LIST *)NULL;
-  w = make_word (cmd);
+  w = make_word (cmd
+#ifdef BASH2PY
+                    , 0
+#endif
+                );
   ret = make_word_list (w, (WORD_LIST *)NULL);	/* $0 */
 
-  w = make_word (cname);			/* $1 */
+  w = make_word (cname
+#ifdef BASH2PY
+                    , 0
+#endif
+                );			/* $1 */
   cl = ret->next = make_word_list (w, (WORD_LIST *)NULL);
 
-  w = make_word (text);
+  w = make_word (text
+#ifdef BASH2PY
+                    , 0
+#endif
+                );
   cl->next = make_word_list (w, (WORD_LIST *)NULL);	/* $2 */
   cl = cl->next;
 
   /* Search lwords for current word */
   for (l = lwords, i = 1; l && i < ind-1; l = l->next, i++)
     ;
-  w = (l && l->word) ? copy_word (l->word) : make_word ("");
+  w = (l && l->word) ? copy_word (l->word) : make_word (""
+#ifdef BASH2PY
+                                                          , 0
+#endif
+                                                       );
   cl->next = make_word_list (w, (WORD_LIST *)NULL);
 
   return ret;

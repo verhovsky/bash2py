@@ -648,7 +648,11 @@ shopt_setopt (name, mode)
   WORD_LIST *wl;
   int r;
 
-  wl = add_string_to_list (name, (WORD_LIST *)NULL);
+  wl = add_string_to_list (name, (WORD_LIST *)NULL
+#ifdef BASH2PY
+                                                  ,0
+#endif
+                                                    );
   r = toggle_shopts (mode, wl, 0);
   dispose_words (wl);
   return r;

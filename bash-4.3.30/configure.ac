@@ -462,8 +462,8 @@ dnl END changes for cross-building
 
 dnl We want these before the checks, so the checks can modify their values.
 if test -z "$CFLAGS"; then
-	AUTO_CFLAGS="-g ${GCC+-O2}"
-	AUTO_LDFLAGS="-g ${GCC+-O2}"
+	AUTO_CFLAGS="-g ${GCC}"
+	AUTO_LDFLAGS="-g ${GCC}"
 else
 	AUTO_CFLAGS= AUTO_LDFLAGS=
 fi

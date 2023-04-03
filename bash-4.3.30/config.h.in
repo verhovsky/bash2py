@@ -23,6 +23,10 @@
 
 /* Configuration feature settings controllable by autoconf. */
 
+#ifndef BASH2PY
+#define BASH2PY  /* Remove this to compile bash */
+#endif
+
 /* Define JOB_CONTROL if your operating system supports
    BSD-like job control. */
 #undef JOB_CONTROL

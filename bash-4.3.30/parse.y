@@ -89,6 +89,10 @@ typedef void *alias_t;
 #  include "maxpath.h"
 #endif /* PROMPT_STRING_DECODE */
 
+#ifdef BASH2PY
+#include "burp.h"
+#endif
+
 #define RE_READ_TOKEN	-99
 #define NO_EXPANSION	-100
 
@@ -113,6 +117,16 @@ typedef void *alias_t;
 extern int extended_glob;
 #endif
 
+#ifdef BASH2PY
+extern int   g_translate_html;
+extern burpT g_output;
+#define LINE_NUMBER position.line
+#define VALUE(X) X.value
+#else
+#define LINE_NUMBER line_number
+#define VALUE(X) X
+#endif
+
 extern int eof_encountered;
 extern int no_line_editing, running_under_emacs;
 extern int current_command_number;
@@ -130,6 +144,10 @@ extern int bash_input_fd_changed;
 #endif
 
 extern int errno;
+#ifdef BASH2PY
+extern void seen_comment_char(int c);
+#endif
+
 /* **************************************************************** */
 /*								    */
 /*		    "Forward" declarations			    */
@@ -140,6 +158,9 @@ extern int errno;
 static void debug_parser __P((int));
 #endif
 
+#ifdef BASH2PY
+static int yy_getc_peek __P((void));
+#endif
 static int yy_getc __P((void));
 static int yy_ungetc __P((int));
 
@@ -181,7 +202,11 @@ static char *parse_comsub __P((int, int, int, int *, int));
 static char *parse_compound_assignment __P((int *));
 #endif
 #if defined (DPAREN_ARITHMETIC) || defined (ARITH_FOR_COMMAND)
-static int parse_dparen __P((int));
+static int parse_dparen __P((int
+#ifdef BASH2PY
+                                 , POSITION *positionP
+#endif
+));
 static int parse_arith_cmd __P((char **, int));
 #endif
 #if defined (COND_COMMAND)
@@ -308,12 +333,14 @@ static int two_tokens_ago;
 
 static int global_extglob;
 
+#ifndef BASH2PY
 /* The line number in a script where the word in a `case WORD', `select WORD'
    or `for WORD' begins.  This is a nested command maximum, since the array
    index is decremented after a case, select, or for command is parsed. */
 #define MAX_CASE_NEST	128
 static int word_lineno[MAX_CASE_NEST+1];
 static int word_top = -1;
+#endif
 
 /* If non-zero, it is the token that we want read_token to return
    regardless of what text is (or isn't) present to be read.  This
@@ -324,11 +351,27 @@ static WORD_DESC *word_desc_to_read;
 
 static REDIRECTEE source;
 static REDIRECTEE redir;
+
+#ifdef BASH2PY
+/* The globally known current input position. */
+POSITION position = {0,0,0};
+
+/* The globally known line number */
+int      line_number = 0;
+#endif
+
 %}
 
 %union {
+#ifdef BASH2PY
+  POSITION position;
+#endif
   WORD_DESC *word;		/* the word that we read. */
+#ifdef BASH2PY
+  PNUMBER number;
+#else
   int number;			/* the number that we read. */
+#endif
   WORD_LIST *word_list;
   COMMAND *command;
   REDIRECT *redirect;
@@ -340,9 +383,24 @@ static REDIRECTEE redir;
    in the case that they are preceded by a list_terminator.  Members
    of the second group are for [[...]] commands.  Members of the
    third group are recognized only under special circumstances. */
-%token IF THEN ELSE ELIF FI CASE ESAC FOR SELECT WHILE UNTIL DO DONE FUNCTION COPROC
+%token <position> IF
+%token THEN ELSE
+%token <position> ELIF
+%token FI
+%token <position> CASE
+%token ESAC
+%token <position> FOR
+%token <position> SELECT
+%token <position> WHILE
+%token <position> UNTIL
+%token DO DONE
+%token <position> FUNCTION
+%token <position> COPROC
 %token COND_START COND_END COND_ERROR
-%token IN BANG TIME TIMEOPT TIMEIGN
+%token IN
+%token <position> BANG
+%token <position> TIME
+%token TIMEOPT TIMEIGN
 
 /* More general tokens. yylex () knows how to make these. */
 %token <word> WORD ASSIGNMENT_WORD REDIR_WORD
@@ -444,13 +502,13 @@ redirection:	'>' WORD
 			}
 	|	NUMBER '>' WORD
 			{
-			  source.dest = $1;
+			  source.dest = VALUE($1);
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_output_direction, redir, 0);
 			}
 	|	NUMBER '<' WORD
 			{
-			  source.dest = $1;
+			  source.dest = VALUE($1);
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_input_direction, redir, 0);
 			}
@@ -474,7 +532,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER GREATER_GREATER WORD
 			{
-			  source.dest = $1;
+			  source.dest = VALUE($1);
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_appending_to, redir, 0);
 			}
@@ -492,7 +550,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER GREATER_BAR WORD
 			{
-			  source.dest = $1;
+			  source.dest = VALUE($1);
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_output_force, redir, 0);
 			}
@@ -510,7 +568,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER LESS_GREATER WORD
 			{
-			  source.dest = $1;
+			  source.dest = VALUE($1);
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_input_output, redir, 0);
 			}
@@ -529,7 +587,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER LESS_LESS WORD
 			{
-			  source.dest = $1;
+			  source.dest = VALUE($1);
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_reading_until, redir, 0);
 			  push_heredoc ($$);
@@ -550,7 +608,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER LESS_LESS_MINUS WORD
 			{
-			  source.dest = $1;
+			  source.dest = VALUE($1);
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_deblank_reading_until, redir, 0);
 			  push_heredoc ($$);
@@ -570,7 +628,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER LESS_LESS_LESS WORD
 			{
-			  source.dest = $1;
+			  source.dest = VALUE($1);
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_reading_string, redir, 0);
 			}
@@ -583,37 +641,37 @@ redirection:	'>' WORD
 	|	LESS_AND NUMBER
 			{
 			  source.dest = 0;
-			  redir.dest = $2;
+			  redir.dest = VALUE($2);
 			  $$ = make_redirection (source, r_duplicating_input, redir, 0);
 			}
 	|	NUMBER LESS_AND NUMBER
 			{
-			  source.dest = $1;
-			  redir.dest = $3;
+			  source.dest = VALUE($1);
+			  redir.dest = VALUE($3);
 			  $$ = make_redirection (source, r_duplicating_input, redir, 0);
 			}
 	|	REDIR_WORD LESS_AND NUMBER
 			{
 			  source.filename = $1;
-			  redir.dest = $3;
+			  redir.dest = VALUE($3);
 			  $$ = make_redirection (source, r_duplicating_input, redir, REDIR_VARASSIGN);
 			}
 	|	GREATER_AND NUMBER
 			{
 			  source.dest = 1;
-			  redir.dest = $2;
+			  redir.dest = VALUE($2);
 			  $$ = make_redirection (source, r_duplicating_output, redir, 0);
 			}
 	|	NUMBER GREATER_AND NUMBER
 			{
-			  source.dest = $1;
-			  redir.dest = $3;
+			  source.dest = VALUE($1);
+			  redir.dest =  VALUE($3);
 			  $$ = make_redirection (source, r_duplicating_output, redir, 0);
 			}
 	|	REDIR_WORD GREATER_AND NUMBER
 			{
 			  source.filename = $1;
-			  redir.dest = $3;
+			  redir.dest = VALUE($3);
 			  $$ = make_redirection (source, r_duplicating_output, redir, REDIR_VARASSIGN);
 			}
 	|	LESS_AND WORD
@@ -624,7 +682,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER LESS_AND WORD
 			{
-			  source.dest = $1;
+			  source.dest = VALUE($1);
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_duplicating_input_word, redir, 0);
 			}
@@ -642,7 +700,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER GREATER_AND WORD
 			{
-			  source.dest = $1;
+			  source.dest = VALUE($1);
 			  redir.filename = $3;
 			  $$ = make_redirection (source, r_duplicating_output_word, redir, 0);
 			}
@@ -660,7 +718,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER GREATER_AND '-'
 			{
-			  source.dest = $1;
+			  source.dest = VALUE($1);
 			  redir.dest = 0;
 			  $$ = make_redirection (source, r_close_this, redir, 0);
 			}
@@ -678,7 +736,7 @@ redirection:	'>' WORD
 			}
 	|	NUMBER LESS_AND '-'
 			{
-			  source.dest = $1;
+			  source.dest = VALUE($1);
 			  redir.dest = 0;
 			  $$ = make_redirection (source, r_close_this, redir, 0);
 			}
@@ -703,11 +761,23 @@ redirection:	'>' WORD
 	;
 
 simple_command_element: WORD
-			{ $$.word = $1; $$.redirect = 0; }
+			{ $$.word = $1; $$.redirect = 0; 
+#ifdef BASH2PY
+              $$.position = $1->position;
+#endif
+            }
 	|	ASSIGNMENT_WORD
-			{ $$.word = $1; $$.redirect = 0; }
+			{ $$.word = $1; $$.redirect = 0; 
+#ifdef BASH2PY
+              $$.position = $1->position;
+#endif
+            }
 	|	redirection
-			{ $$.redirect = $1; $$.word = 0; }
+			{ $$.redirect = $1; $$.word = 0; 
+#ifdef BASH2PY
+              $$.position = $1->position;
+#endif
+            }
 	;
 
 redirection_list: redirection
@@ -726,9 +796,19 @@ redirection_list: redirection
 	;
 
 simple_command:	simple_command_element
-			{ $$ = make_simple_command ($1, (COMMAND *)NULL); }
+			{ $$ = make_simple_command ($1, (COMMAND *)NULL
+#ifdef BASH2PY
+                                                           , &($1.position)
+#endif
+                                       ); 
+            }
 	|	simple_command simple_command_element
-			{ $$ = make_simple_command ($2, $1); }
+			{ $$ = make_simple_command ($2, $1
+#ifdef BASH2PY
+                                                           , &($1->position)
+#endif
+                                       ); 
+            }
 	;
 
 command:	simple_command
@@ -762,9 +842,19 @@ shell_command:	for_command
 	|	case_command
 			{ $$ = $1; }
  	|	WHILE compound_list DO compound_list DONE
-			{ $$ = make_while_command ($2, $4); }
+			{ $$ = make_while_command ($2, $4
+#ifdef BASH2PY
+                                             ,&($1)
+#endif
+                                      ); 
+            }
 	|	UNTIL compound_list DO compound_list DONE
-			{ $$ = make_until_command ($2, $4); }
+			{ $$ = make_until_command ($2, $4
+#ifdef BASH2PY
+                                             ,&($1)
+#endif
+                                      ); 
+            }
 	|	select_command
 			{ $$ = $1; }
 	|	if_command
@@ -783,125 +873,248 @@ shell_command:	for_command
 
 for_command:	FOR WORD newline_list DO compound_list DONE
 			{
-			  $$ = make_for_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL), $5, word_lineno[word_top]);
+			  $$ = make_for_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL
+#ifdef BASH2PY
+        , &($2->position)), $5, &($1));
+#else
+        ), $5, word_lineno[word_top]);
 			  if (word_top > 0) word_top--;
+#endif
 			}
 	|	FOR WORD newline_list '{' compound_list '}'
 			{
-			  $$ = make_for_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL), $5, word_lineno[word_top]);
+			  $$ = make_for_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL
+#ifdef BASH2PY
+        , &($2->position)), $5, &($1));
+#else
+        ), $5, word_lineno[word_top]);
 			  if (word_top > 0) word_top--;
+#endif
 			}
 	|	FOR WORD ';' newline_list DO compound_list DONE
 			{
-			  $$ = make_for_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL), $6, word_lineno[word_top]);
+			  $$ = make_for_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL
+#ifdef BASH2PY
+        , &($2->position)), $6, &($1));
+#else
+        ), $6, word_lineno[word_top]);
 			  if (word_top > 0) word_top--;
+#endif
 			}
 	|	FOR WORD ';' newline_list '{' compound_list '}'
 			{
-			  $$ = make_for_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL), $6, word_lineno[word_top]);
+			  $$ = make_for_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL
+#ifdef BASH2PY
+        , &($2->position)), $6, &($1));
+#else
+        ), $6, word_lineno[word_top]);
 			  if (word_top > 0) word_top--;
+#endif
 			}
 	|	FOR WORD newline_list IN word_list list_terminator newline_list DO compound_list DONE
 			{
-			  $$ = make_for_command ($2, REVERSE_LIST ($5, WORD_LIST *), $9, word_lineno[word_top]);
+			  $$ = make_for_command ($2, REVERSE_LIST ($5, WORD_LIST *), $9, 
+#ifdef BASH2PY
+                                   &($1));
+#else
+                                   word_lineno[word_top]);
 			  if (word_top > 0) word_top--;
+#endif
 			}
 	|	FOR WORD newline_list IN word_list list_terminator newline_list '{' compound_list '}'
 			{
-			  $$ = make_for_command ($2, REVERSE_LIST ($5, WORD_LIST *), $9, word_lineno[word_top]);
+			  $$ = make_for_command ($2, REVERSE_LIST ($5, WORD_LIST *), $9, 
+#ifdef BASH2PY
+                                   &($1));
+#else
+                                   word_lineno[word_top]);
 			  if (word_top > 0) word_top--;
+#endif
 			}
 	|	FOR WORD newline_list IN list_terminator newline_list DO compound_list DONE
 			{
-			  $$ = make_for_command ($2, (WORD_LIST *)NULL, $8, word_lineno[word_top]);
+			  $$ = make_for_command ($2, (WORD_LIST *)NULL, $8, 
+#ifdef BASH2PY
+                                   &($1));
+#else                              
+                                   word_lineno[word_top]);
 			  if (word_top > 0) word_top--;
+#endif
 			}
 	|	FOR WORD newline_list IN list_terminator newline_list '{' compound_list '}'
 			{
-			  $$ = make_for_command ($2, (WORD_LIST *)NULL, $8, word_lineno[word_top]);
+			  $$ = make_for_command ($2, (WORD_LIST *)NULL, $8, 
+#ifdef BASH2PY
+                                   &($1));
+#else
+                                   word_lineno[word_top]);
 			  if (word_top > 0) word_top--;
+#endif
 			}
 	;
 
 arith_for_command:	FOR ARITH_FOR_EXPRS list_terminator newline_list DO compound_list DONE
 				{
-				  $$ = make_arith_for_command ($2, $6, arith_for_lineno);
+				  $$ = make_arith_for_command ($2, $6, 
+#ifdef BASH2PY
+                                                      &($1));
+#else
+                                                      arith_for_lineno);
 				  if (word_top > 0) word_top--;
+#endif
 				}
 	|		FOR ARITH_FOR_EXPRS list_terminator newline_list '{' compound_list '}'
 				{
-				  $$ = make_arith_for_command ($2, $6, arith_for_lineno);
+				  $$ = make_arith_for_command ($2, $6, 
+#ifdef BASH2PY
+                                                      &($1));
+#else
+                                                      arith_for_lineno);
 				  if (word_top > 0) word_top--;
+#endif
 				}
 	|		FOR ARITH_FOR_EXPRS DO compound_list DONE
 				{
-				  $$ = make_arith_for_command ($2, $4, arith_for_lineno);
+				  $$ = make_arith_for_command ($2, $4, 
+#ifdef BASH2PY
+                                                      &($1));
+#else
+                                                      arith_for_lineno);
 				  if (word_top > 0) word_top--;
+#endif
 				}
 	|		FOR ARITH_FOR_EXPRS '{' compound_list '}'
 				{
-				  $$ = make_arith_for_command ($2, $4, arith_for_lineno);
+				  $$ = make_arith_for_command ($2, $4, 
+#ifdef BASH2PY
+                                                      &($1));
+#else
+                                                       arith_for_lineno);
 				  if (word_top > 0) word_top--;
+#endif
 				}
 	;
 
 select_command:	SELECT WORD newline_list DO list DONE
 			{
-			  $$ = make_select_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL), $5, word_lineno[word_top]);
+			  $$ = make_select_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL 
+#ifdef BASH2PY
+            ,&($2->position)), $5, &($1));
+#else
+            ), $5, word_lineno[word_top]);
 			  if (word_top > 0) word_top--;
+#endif
 			}
 	|	SELECT WORD newline_list '{' list '}'
 			{
-			  $$ = make_select_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL), $5, word_lineno[word_top]);
+			  $$ = make_select_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL
+#ifdef BASH2PY
+           , &($2->position)), $5, &($1));
+#else
+           ), $5, word_lineno[word_top]);
 			  if (word_top > 0) word_top--;
+#endif
 			}
 	|	SELECT WORD ';' newline_list DO list DONE
 			{
-			  $$ = make_select_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL), $6, word_lineno[word_top]);
+			  $$ = make_select_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL
+#ifdef BASH2PY
+            , &($2->position)), $6, &($1));
+#else
+           ), $6, word_lineno[word_top]);
 			  if (word_top > 0) word_top--;
+#endif
 			}
 	|	SELECT WORD ';' newline_list '{' list '}'
 			{
-			  $$ = make_select_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL), $6, word_lineno[word_top]);
+			  $$ = make_select_command ($2, add_string_to_list ("\"$@\"", (WORD_LIST *)NULL
+#ifdef BASH2PY
+            , &($2->position)), $6, &($1));
+#else
+           ), $6, word_lineno[word_top]);
 			  if (word_top > 0) word_top--;
+#endif
 			}
 	|	SELECT WORD newline_list IN word_list list_terminator newline_list DO list DONE
 			{
-			  $$ = make_select_command ($2, REVERSE_LIST ($5, WORD_LIST *), $9, word_lineno[word_top]);
+			  $$ = make_select_command ($2, REVERSE_LIST ($5, WORD_LIST *), $9, 
+#ifdef BASH2PY
+                                        &($1));
+#else
+                                        word_lineno[word_top]);
 			  if (word_top > 0) word_top--;
+#endif
 			}
 	|	SELECT WORD newline_list IN word_list list_terminator newline_list '{' list '}'
 			{
-			  $$ = make_select_command ($2, REVERSE_LIST ($5, WORD_LIST *), $9, word_lineno[word_top]);
+			  $$ = make_select_command ($2, REVERSE_LIST ($5, WORD_LIST *), $9, 
+#ifdef BASH2PY
+&($1));
+#else
+word_lineno[word_top]);
 			  if (word_top > 0) word_top--;
+#endif
 			}
 	;
 
 case_command:	CASE WORD newline_list IN newline_list ESAC
 			{
-			  $$ = make_case_command ($2, (PATTERN_LIST *)NULL, word_lineno[word_top]);
+			  $$ = make_case_command ($2, (PATTERN_LIST *)NULL, 
+#ifdef BASH2PY
+                                                               &($1));
+#else
+                                                               word_lineno[word_top]);
 			  if (word_top > 0) word_top--;
+#endif
 			}
 	|	CASE WORD newline_list IN case_clause_sequence newline_list ESAC
 			{
-			  $$ = make_case_command ($2, $5, word_lineno[word_top]);
+			  $$ = make_case_command ($2, $5, 
+#ifdef BASH2PY
+                                             &($1));
+#else
+                                             word_lineno[word_top]);
 			  if (word_top > 0) word_top--;
+#endif
 			}
 	|	CASE WORD newline_list IN case_clause ESAC
 			{
-			  $$ = make_case_command ($2, $5, word_lineno[word_top]);
+			  $$ = make_case_command ($2, $5, 
+#ifdef BASH2PY
+                                             &($1));
+#else
+                                             word_lineno[word_top]);
 			  if (word_top > 0) word_top--;
+#endif
 			}
 	;
 
 function_def:	WORD '(' ')' newline_list function_body
-			{ $$ = make_function_def ($1, $5, function_dstart, function_bstart); }
+			{ $$ = make_function_def ($1, $5, 
+#ifdef BASH2PY
+                                             &($1->position)
+#else
+                                             function_dstart, function_bstart
+#endif
+                                                                             ); }
 
 	|	FUNCTION WORD '(' ')' newline_list function_body
-			{ $$ = make_function_def ($2, $6, function_dstart, function_bstart); }
+			{ $$ = make_function_def ($2, $6, 
+#ifdef BASH2PY
+                                             &($1)
+#else
+                                             function_dstart, function_bstart
+#endif
+                                                                            ); }
 
 	|	FUNCTION WORD newline_list function_body
-			{ $$ = make_function_def ($2, $4, function_dstart, function_bstart); }
+			{ $$ = make_function_def ($2, $4, 
+#ifdef BASH2PY
+                                              &($1)
+#else
+                                              function_dstart, function_bstart
+#endif
+                                                                            ); }
 	;
 
 function_body:	shell_command
@@ -946,7 +1159,11 @@ subshell:	'(' compound_list ')'
 
 coproc:		COPROC shell_command
 			{
-			  $$ = make_coproc_command ("COPROC", $2);
+			  $$ = make_coproc_command ("COPROC", $2
+#ifdef BASH2PY
+                                                    ,&($1)
+#endif
+                                                    );
 			  $$->flags |= CMD_WANT_SUBSHELL|CMD_COPROC_SUBSHELL;
 			}
 	|	COPROC shell_command redirection_list
@@ -963,12 +1180,20 @@ coproc:		COPROC shell_command
 			    }
 			  else
 			    tc->redirects = $3;
-			  $$ = make_coproc_command ("COPROC", $2);
+			  $$ = make_coproc_command ("COPROC", $2
+#ifdef BASH2PY
+                                                     ,&($1)
+#endif
+                                                    );
 			  $$->flags |= CMD_WANT_SUBSHELL|CMD_COPROC_SUBSHELL;
 			}
 	|	COPROC WORD shell_command
 			{
-			  $$ = make_coproc_command ($2->word, $3);
+			  $$ = make_coproc_command ($2->word, $3
+#ifdef BASH2PY
+                                                    , &($1)
+#endif
+                                                    );
 			  $$->flags |= CMD_WANT_SUBSHELL|CMD_COPROC_SUBSHELL;
 			}
 	|	COPROC WORD shell_command redirection_list
@@ -985,22 +1210,42 @@ coproc:		COPROC shell_command
 			    }
 			  else
 			    tc->redirects = $4;
-			  $$ = make_coproc_command ($2->word, $3);
+			  $$ = make_coproc_command ($2->word, $3
+#ifdef BASH2PY
+                                                     ,&($1)
+#endif
+                                                    );
 			  $$->flags |= CMD_WANT_SUBSHELL|CMD_COPROC_SUBSHELL;
 			}
 	|	COPROC simple_command
 			{
-			  $$ = make_coproc_command ("COPROC", clean_simple_command ($2));
+			  $$ = make_coproc_command ("COPROC", clean_simple_command ($2)
+#ifdef BASH2PY
+                                                                          ,&($1)
+#endif
+                                                                           );
 			  $$->flags |= CMD_WANT_SUBSHELL|CMD_COPROC_SUBSHELL;
 			}
 	;
 
 if_command:	IF compound_list THEN compound_list FI
-			{ $$ = make_if_command ($2, $4, (COMMAND *)NULL); }
+			{ $$ = make_if_command ($2, $4, (COMMAND *)NULL
+#ifdef BASH2PY
+                                                            ,&($1)
+#endif
+                                                           ); }
 	|	IF compound_list THEN compound_list ELSE compound_list FI
-			{ $$ = make_if_command ($2, $4, $6); }
+			{ $$ = make_if_command ($2, $4, $6
+#ifdef BASH2PY
+                                              ,&($1)
+#endif
+                                              ); }
 	|	IF compound_list THEN compound_list elif_clause FI
-			{ $$ = make_if_command ($2, $4, $5); }
+			{ $$ = make_if_command ($2, $4, $5
+#ifdef BASH2PY
+                                              ,&($1)
+#endif
+                                              ); }
 	;
 
 
@@ -1009,7 +1254,11 @@ group_command:	'{' compound_list '}'
 	;
 
 arith_command:	ARITH_CMD
-			{ $$ = make_arith_command ($1); }
+			{ $$ = make_arith_command ($1
+#ifdef BASH2PY
+                                         , &($1->position)
+#endif
+                                         ); }
 	;
 
 cond_command:	COND_START COND_CMD COND_END
@@ -1017,11 +1266,32 @@ cond_command:	COND_START COND_CMD COND_END
 	; 
 
 elif_clause:	ELIF compound_list THEN compound_list
-			{ $$ = make_if_command ($2, $4, (COMMAND *)NULL); }
+			{ $$ = make_if_command ($2, $4, (COMMAND *)NULL
+#ifdef BASH2PY
+                                                           , &($1));
+              $$->flags |= CMD_ELIF;
+#else
+                                                                  );
+#endif
+            }
 	|	ELIF compound_list THEN compound_list ELSE compound_list
-			{ $$ = make_if_command ($2, $4, $6); }
+			{ $$ = make_if_command ($2, $4, $6
+#ifdef BASH2PY
+                                              , &($1));
+              $$->flags |= CMD_ELIF;
+#else
+                                                     );
+#endif
+            }
 	|	ELIF compound_list THEN compound_list elif_clause
-			{ $$ = make_if_command ($2, $4, $5); }
+			{ $$ = make_if_command ($2, $4, $5
+#ifdef BASH2PY
+                                              , &($1));
+              $$->flags |= CMD_ELIF;
+#else
+                                                     );
+#endif
+            }
 	;
 
 case_clause:	pattern_list
@@ -1115,11 +1385,32 @@ simple_list_terminator:	'\n'
 	;
 
 list_terminator:'\n'
-		{ $$ = '\n'; }
+		{
+#ifdef BASH2PY
+          $$.value    = '\n';
+          $$.position = position;
+#else
+          $$ = '\n';
+#endif
+        }
 	|	';'
-		{ $$ = ';'; }
+		{
+#ifdef BASH2PY
+          $$.value = ';';
+          $$.position = position;
+#else
+		  $$ = ';';
+#endif
+        }
 	|	yacc_EOF
-		{ $$ = yacc_EOF; }
+		{
+#ifdef BASH2PY
+		  $$.value = yacc_EOF;
+          $$.position = position;
+#else
+		  $$ = yacc_EOF;
+#endif
+        }
 	;
 
 newline_list:
@@ -1201,12 +1492,18 @@ pipeline_command: pipeline
 			  if ($2)
 			    $2->flags ^= CMD_INVERT_RETURN;	/* toggle */
 			  $$ = $2;
+#ifdef BASH2PY
+              $$->position = $1;
+#endif
 			}
 	|	timespec pipeline_command
 			{
 			  if ($2)
-			    $2->flags |= $1;
+			    $2->flags |= VALUE($1);
 			  $$ = $2;
+#ifdef BASH2PY
+              $$->position = $1.position;
+#endif
 			}
 	|	timespec list_terminator
 			{
@@ -1219,10 +1516,15 @@ pipeline_command: pipeline
 			     terminate this, one to terminate the command) */
 			  x.word = 0;
 			  x.redirect = 0;
-			  $$ = make_simple_command (x, (COMMAND *)NULL);
-			  $$->flags |= $1;
+			  $$ = make_simple_command (x, (COMMAND *)NULL
+#ifdef BASH2PY
+                                                          ,&($1.position)
+#endif
+                                       );
+              $$->flags |= VALUE($1);
 			  /* XXX - let's cheat and push a newline back */
-			  if ($2 == '\n')
+
+			  if (VALUE($2) == '\n')
 			    token_to_read = '\n';
 			}
 	|	BANG list_terminator
@@ -1237,10 +1539,14 @@ pipeline_command: pipeline
 			     terminate this, one to terminate the command) */
 			  x.word = 0;
 			  x.redirect = 0;
-			  $$ = make_simple_command (x, (COMMAND *)NULL);
+			  $$ = make_simple_command (x, (COMMAND *)NULL
+#ifdef BASH2PY
+                                                           ,&($1)
+#endif
+                                                          );
 			  $$->flags |= CMD_INVERT_RETURN;
 			  /* XXX - let's cheat and push a newline back */
-			  if ($2 == '\n')
+			  if (VALUE($2) == '\n')
 			    token_to_read = '\n';
 			}
 	;
@@ -1275,11 +1581,29 @@ pipeline:	pipeline '|' newline_list pipeline
 	;
 
 timespec:	TIME
-			{ $$ = CMD_TIME_PIPELINE; }
+            {
+#ifdef BASH2PY
+			  $$.value = CMD_TIME_PIPELINE; $$.position = $1;
+#else
+              $$ = CMD_TIME_PIPELINE;
+#endif
+            }
 	|	TIME TIMEOPT
-			{ $$ = CMD_TIME_PIPELINE|CMD_TIME_POSIX; }
+            {
+#ifdef BASH2PY
+			  $$.value = CMD_TIME_PIPELINE|CMD_TIME_POSIX; $$.position = $1;
+#else
+			  $$ = CMD_TIME_PIPELINE|CMD_TIME_POSIX;
+#endif
+            }
 	|	TIME TIMEOPT TIMEIGN
-			{ $$ = CMD_TIME_PIPELINE|CMD_TIME_POSIX; }
+            {
+#ifdef BASH2PY
+			  $$.value = CMD_TIME_PIPELINE|CMD_TIME_POSIX; $$.position = $1;
+#else
+              $$ = CMD_TIME_PIPELINE|CMD_TIME_POSIX;
+#endif
+            }
 	;
 %%
 
@@ -1375,11 +1699,37 @@ yy_input_name ()
   return (bash_input.name ? bash_input.name : "stdin");
 }
 
+#ifdef BASH2PY
+static int
+yy_getc_peek ()
+{
+  return (*(bash_input.getter)) ();
+}
+#endif
+
 /* Call this to get the next character of input. */
 static int
 yy_getc ()
 {
+#ifdef BASH2PY
+  int c;
+
+  c = (*(bash_input.getter))();
+
+  if (g_translate_html) {
+    burpc(&g_output, c);
+  }
+  position.byte++;
+  if (c == '\n') {
+    position.line++;
+    position.column = 0;
+  } else {
+    position.column++;
+  }
+  return c;
+#else
   return (*(bash_input.getter)) ();
+#endif
 }
 
 /* Call this to unget C.  That is, to make C the next character
@@ -1388,6 +1738,13 @@ static int
 yy_ungetc (c)
      int c;
 {
+#ifdef BASH2PY
+  if (g_translate_html) {
+    burp_ungetc(&g_output);
+  }
+  position.byte--;
+  position.column--;
+#endif
   return (*(bash_input.ungetter)) (c);
 }
 
@@ -1534,6 +1891,11 @@ yy_string_get ()
   if (string && *string)
     {
       c = *string++;
+#ifdef BASH2PY
+      if (g_translate_html) {
+        burpc(&g_output, c);
+      }
+#endif
       bash_input.location.string = string;
       return (c);
     }
@@ -1546,6 +1908,11 @@ yy_string_unget (c)
      int c;
 {
   *(--bash_input.location.string) = c;
+#ifdef BASH2PY
+  if (g_translate_html) {
+    burp_ungetc(&g_output);
+  }
+#endif
   return (c);
 }
 
@@ -1646,16 +2013,21 @@ typedef struct stream_saver {
   struct stream_saver *next;
   BASH_INPUT bash_input;
   int line;
+#ifdef BASH2PY
+  POSITION position;
+#endif
 #if defined (BUFFERED_INPUT)
   BUFFERED_STREAM *bstream;
 #endif /* BUFFERED_INPUT */
 } STREAM_SAVER;
 
+#ifndef BASH2PY
 /* The globally known line number. */
 int line_number = 0;
 
 /* The line number offset set by assigning to LINENO.  Not currently used. */
 int line_number_base = 0;
+#endif
 
 #if defined (COND_COMMAND)
 static int cond_lineno;
@@ -1681,12 +2053,20 @@ push_stream (reset_lineno)
 #endif /* BUFFERED_INPUT */
 
   saver->line = line_number;
+#ifdef BASH2PY
+  saver->position = position;
+#endif
   bash_input.name = (char *)NULL;
   saver->next = stream_list;
   stream_list = saver;
   EOF_Reached = 0;
-  if (reset_lineno)
+  if (reset_lineno) {
     line_number = 0;
+#ifdef BASH2PY
+    position.line = 0;
+    position.column = 0;
+#endif
+  }
 }
 
 void
@@ -1730,6 +2110,10 @@ pop_stream ()
 #endif /* BUFFERED_INPUT */
 
       line_number = saver->line;
+#ifdef BASH2PY
+      saver->position.byte = position.byte;
+      position             = saver->position;
+#endif
 
       FREE (saver->bash_input.name);
       free (saver);
@@ -2016,12 +2400,23 @@ read_a_line (remove_quoted_newline)
       else if (c == '\\' && remove_quoted_newline)
 	{
 	  QUIT;
+#ifdef BASH2PY
+     peekc = yy_getc_peek ();
+      if (peekc == '\n')
+        {
+          line_number++;
+          position.line++;
+          position.column = 0;
+          continue; /* Make the unquoted \<newline> pair disappear. */
+        }
+#else
 	  peekc = yy_getc ();
 	  if (peekc == '\n')
 	    {
 	      line_number++;
 	      continue;	/* Make the unquoted \<newline> pair disappear. */
 	    }
+#endif
 	  else
 	    {
 	      yy_ungetc (peekc);
@@ -2219,6 +2614,14 @@ shell_getc (remove_quoted_newline)
     {
       c = eol_ungetc_lookahead;
       eol_ungetc_lookahead = 0;
+#ifdef BASH2PY
+     if (c == '\n') {
+        ++line_number;
+        position.line++;
+        position.column = 0;
+      }
+      position.byte++;
+#endif
       return (c);
     }
 
@@ -2234,6 +2637,10 @@ shell_getc (remove_quoted_newline)
 #endif /* !ALIAS && !DPAREN_ARITHMETIC */
     {
       line_number++;
+#ifdef BASH2PY
+      position.line++;
+      position.column = 0;
+#endif
 
       /* Let's not let one really really long line blow up memory allocation */
       if (shell_input_line && shell_input_line_size >= 32768)
@@ -2305,7 +2712,7 @@ shell_getc (remove_quoted_newline)
 	      if (n <= 2)	/* we have to save 1 for the newline added below */
 		{
 		  if (truncating == 0)
-		    internal_warning("shell_getc: shell_input_line_size (%zu) exceeds SIZE_MAX (%llu): line truncated", shell_input_line_size, SIZE_MAX);
+		    internal_warning("shell_getc: shell_input_line_size (%zu) exceeds SIZE_MAX (%lu): line truncated", shell_input_line_size, SIZE_MAX);
 		  shell_input_line[i] = '\0';
 		  truncating = 1;
 		}
@@ -2472,6 +2879,10 @@ pop_alias:
 	if (SHOULD_PROMPT ())
 	  prompt_again ();
 	line_number++;
+#ifdef BASH2PY
+    position.line++;
+    position.column = 0;
+#endif
 	/* What do we do here if we're expanding an alias whose definition
 	   includes an escaped newline?  If that's the last character in the
 	   alias expansion, we just pop the pushed string list (recall that
@@ -2566,8 +2977,16 @@ discard_until (character)
 {
   int c;
 
-  while ((c = shell_getc (0)) != EOF && c != character)
-    ;
+#ifdef BASH2PY
+  seen_comment_char(-1);
+#endif
+  while ((c = shell_getc (0)) != EOF) {
+#ifdef BASH2PY
+    seen_comment_char(c);
+#endif
+    if (c == character) {
+      break;
+  } }
 
   if (c != EOF)
     shell_ungetc (c);
@@ -2675,7 +3094,12 @@ gather_here_documents ()
   while (need_here_doc > 0)
     {
       parser_state |= PST_HEREDOC;
-      make_here_document (redir_stack[r++], line_number);
+      make_here_document (redir_stack[r++], 
+#ifdef BASH2PY
+                                           &position);
+#else
+                                           line_number);
+#endif
       parser_state &= ~PST_HEREDOC;
       need_here_doc--;
     }
@@ -2914,7 +3338,7 @@ special_case_tokens (tokstr)
       if (tokstr[0] == '{' && tokstr[1] == '\0')		/* } */
 	{
 	  open_brace_count++;
-	  function_bstart = line_number;
+	  function_bstart = LINE_NUMBER;
 	  return ('{');					/* } */
 	}
     }
@@ -2999,13 +3423,18 @@ read_token (command)
   int character;		/* Current character. */
   int peek_char;		/* Temporary look-ahead character. */
   int result;			/* The thing to return. */
+#ifdef BASH2PY
+  POSITION start_position;
+
+  /* Always ensure position is available */
+  yylval.position = start_position = position;
+#endif
 
   if (command == RESET)
     {
       reset_parser ();
       return ('\n');
     }
-
   if (token_to_read)
     {
       result = token_to_read;
@@ -3021,7 +3450,7 @@ read_token (command)
 #if defined (COND_COMMAND)
   if ((parser_state & (PST_CONDCMD|PST_CONDEXPR)) == PST_CONDCMD)
     {
-      cond_lineno = line_number;
+      cond_lineno = LINE_NUMBER;
       parser_state |= PST_CONDEXPR;
       yylval.command = parse_cond_command ();
       if (cond_token != COND_END)
@@ -3050,6 +3479,10 @@ read_token (command)
       EOF_Reached = 1;
       return (yacc_EOF);
     }
+
+#ifdef BASH2PY
+  yylval.position = start_position = position;
+#endif
 
   if MBTEST(character == '#' && (!interactive || interactive_comments))
     {
@@ -3135,7 +3568,11 @@ read_token (command)
 
 #if defined (DPAREN_ARITHMETIC) || defined (ARITH_FOR_COMMAND)
 	    case '(':		/* ) */
-	      result = parse_dparen (character);
+	      result = parse_dparen (character
+#ifdef BASH2PY
+                                          , &start_position
+#endif
+                                                           );
 	      if (result == -2)
 	        break;
 	      else
@@ -3184,7 +3621,7 @@ read_token (command)
 #if defined (ALIAS)
 	  parser_state &= ~PST_ALEXPNEXT;
 #endif /* ALIAS */
-	  function_dstart = line_number;
+	  function_dstart = LINE_NUMBER;
 	}
 
       /* case pattern lists may be preceded by an optional left paren.  If
@@ -3299,7 +3736,7 @@ parse_matched_pair (qc, open, close, lenp, flags)
   ret = (char *)xmalloc (retsize = 64);
   retind = 0;
 
-  start_lineno = line_number;
+  start_lineno = LINE_NUMBER;
   while (count)
     {
       ch = shell_getc (qc != '\'' && (tflags & (LEX_PASSNEXT)) == 0);
@@ -3574,7 +4011,7 @@ parse_comsub (qc, open, close, lenp, flags)
   ret = (char *)xmalloc (retsize = 64);
   retind = 0;
 
-  start_lineno = line_number;
+  start_lineno = LINE_NUMBER;
   lex_rwlen = lex_wlen = 0;
 
   heredelim = 0;
@@ -4049,7 +4486,7 @@ xparse_dolparen (base, string, indp, flags)
     {
 #if DEBUG
       if (ep[-1] != '\n')
-	itrace("xparse_dolparen:%d: ep[-1] != RPAREN (%d), ep = `%s'", line_number, ep[-1], ep);
+	itrace("xparse_dolparen:%d: ep[-1] != RPAREN (%d), ep = `%s'", LINE_NUMBER , ep[-1], ep);
 #endif
       while (ep > ostring && ep[-1] == '\n') ep--;
     }
@@ -4060,7 +4497,7 @@ xparse_dolparen (base, string, indp, flags)
   /*(*/
 #if DEBUG
   if (base[*indp] != ')')
-    itrace("xparse_dolparen:%d: base[%d] != RPAREN (%d), base = `%s'", line_number, *indp, base[*indp], base);
+    itrace("xparse_dolparen:%d: base[%d] != RPAREN (%d), base = `%s'", LINE_NUMBER ,*indp, base[*indp], base);
 #endif
 
   if (flags & SX_NOALLOC) 
@@ -4083,8 +4520,11 @@ xparse_dolparen (base, string, indp, flags)
    the parsed token, -1 on error, or -2 if we didn't do anything and
    should just go on. */
 static int
-parse_dparen (c)
-     int c;
+parse_dparen (int c
+#ifdef BASH2PY
+                    , POSITION *positionP
+#endif
+             )
 {
   int cmdtyp, sline;
   char *wval;
@@ -4093,12 +4533,15 @@ parse_dparen (c)
 #if defined (ARITH_FOR_COMMAND)
   if (last_read_token == FOR)
     {
-      arith_for_lineno = line_number;
+      arith_for_lineno = LINE_NUMBER;
       cmdtyp = parse_arith_cmd (&wval, 0);
       if (cmdtyp == 1)
 	{
 	  wd = alloc_word_desc ();
 	  wd->word = wval;
+#ifdef BASH2PY
+      wd->position = *positionP;
+#endif
 	  yylval.word_list = make_word_list (wd, (WORD_LIST *)NULL);
 	  return (ARITH_FOR_EXPRS);
 	}
@@ -4110,7 +4553,7 @@ parse_dparen (c)
 #if defined (DPAREN_ARITHMETIC)
   if (reserved_word_acceptable (last_read_token))
     {
-      sline = line_number;
+      sline = LINE_NUMBER;
 
       cmdtyp = parse_arith_cmd (&wval, 0);
       if (cmdtyp == 1)	/* arithmetic command */
@@ -4118,6 +4561,9 @@ parse_dparen (c)
 	  wd = alloc_word_desc ();
 	  wd->word = wval;
 	  wd->flags = W_QUOTED|W_NOSPLIT|W_NOGLOB|W_DQUOTE;
+#ifdef BASH2PY
+      wd->position = *positionP;
+#endif
 	  yylval.word_list = make_word_list (wd, (WORD_LIST *)NULL);
 	  return (ARITH_CMD);
 	}
@@ -4151,7 +4597,7 @@ parse_arith_cmd (ep, adddq)
   char *ttok, *tokstr;
   int ttoklen;
 
-  exp_lineno = line_number;
+  exp_lineno = LINE_NUMBER;
   ttok = parse_matched_pair (0, '(', ')', &ttoklen, 0);
   rval = 1;
   if (ttok == &matched_pair_error)
@@ -4227,7 +4673,11 @@ cond_or ()
   if (cond_token == OR_OR)
     {
       r = cond_or ();
-      l = make_cond_node (COND_OR, (WORD_DESC *)NULL, l, r);
+      l = make_cond_node (COND_OR, (WORD_DESC *)NULL, l, r
+#ifdef BASH2PY
+                                                          , &(l->position)
+#endif
+                         );
     }
   return l;
 }
@@ -4241,7 +4691,11 @@ cond_and ()
   if (cond_token == AND_AND)
     {
       r = cond_and ();
-      l = make_cond_node (COND_AND, (WORD_DESC *)NULL, l, r);
+      l = make_cond_node (COND_AND, (WORD_DESC *)NULL, l, r
+#ifdef BASH2PY
+                                                          , &(l->position)
+#endif
+                         );
     }
   return l;
 }
@@ -4267,12 +4721,20 @@ cond_term ()
   COND_COM *term, *tleft, *tright;
   int tok, lineno;
   char *etext;
+#ifdef BASH2PY
+  POSITION start_position;
+#endif
 
   /* Read a token.  It can be a left paren, a `!', a unary operator, or a
      word that should be the first argument of a binary operator.  Start by
      skipping newlines, since this is a compound command. */
   tok = cond_skip_newlines ();
+#ifdef BASH2PY
+  start_position = position;
+  lineno         = position.line;
+#else
   lineno = line_number;
+#endif
   if (tok == COND_END)
     {
       COND_RETURN_ERROR ();
@@ -4293,13 +4755,21 @@ cond_term ()
 	    parser_error (lineno, _("expected `)'"));
 	  COND_RETURN_ERROR ();
 	}
-      term = make_cond_node (COND_EXPR, (WORD_DESC *)NULL, term, (COND_COM *)NULL);
+      term = make_cond_node (COND_EXPR, (WORD_DESC *)NULL, term, (COND_COM *)NULL
+#ifdef BASH2PY
+                             , &start_position
+#endif
+                            );
       (void)cond_skip_newlines ();
     }
   else if (tok == BANG || (tok == WORD && (yylval.word->word[0] == '!' && yylval.word->word[1] == '\0')))
     {
-      if (tok == WORD)
+      if (tok == WORD) {
 	dispose_word (yylval.word);	/* not needed */
+#ifdef BASH2PY
+        yylval.position = position;
+#endif
+      }
       term = cond_term ();
       if (term)
 	term->flags |= CMD_INVERT_RETURN;
@@ -4310,19 +4780,27 @@ cond_term ()
       tok = read_token (READ);
       if (tok == WORD)
 	{
-	  tleft = make_cond_node (COND_TERM, yylval.word, (COND_COM *)NULL, (COND_COM *)NULL);
-	  term = make_cond_node (COND_UNARY, op, tleft, (COND_COM *)NULL);
+	  tleft = make_cond_node (COND_TERM, yylval.word, (COND_COM *)NULL, (COND_COM *)NULL
+#ifdef BASH2PY
+                                  ,&start_position
+#endif
+                                  );
+	  term = make_cond_node (COND_UNARY, op, tleft, (COND_COM *)NULL
+#ifdef BASH2PY
+                                  ,&start_position
+#endif
+                                );
 	}
       else
 	{
 	  dispose_word (op);
 	  if (etext = error_token_from_token (tok))
 	    {
-	      parser_error (line_number, _("unexpected argument `%s' to conditional unary operator"), etext);
+	      parser_error (LINE_NUMBER, _("unexpected argument `%s' to conditional unary operator"), etext);
 	      free (etext);
 	    }
 	  else
-	    parser_error (line_number, _("unexpected argument to conditional unary operator"));
+	    parser_error (LINE_NUMBER, _("unexpected argument to conditional unary operator"));
 	  COND_RETURN_ERROR ();
 	}
 
@@ -4331,7 +4809,11 @@ cond_term ()
   else if (tok == WORD)		/* left argument to binary operator */
     {
       /* lhs */
-      tleft = make_cond_node (COND_TERM, yylval.word, (COND_COM *)NULL, (COND_COM *)NULL);
+      tleft = make_cond_node (COND_TERM, yylval.word, (COND_COM *)NULL, (COND_COM *)NULL
+#ifdef BASH2PY
+        ,&start_position
+#endif
+                              );
 
       /* binop */
       tok = read_token (READ);
@@ -4351,7 +4833,11 @@ cond_term ()
 	}
 #endif
       else if (tok == '<' || tok == '>')
-	op = make_word_from_token (tok);  /* ( */
+	op = make_word_from_token (tok
+#ifdef BASH2PY
+                                      ,&start_position
+#endif
+                                  );  /* ( */
       /* There should be a check before blindly accepting the `)' that we have
 	 seen the opening `('. */
       else if (tok == COND_END || tok == AND_AND || tok == OR_OR || tok == ')')
@@ -4359,8 +4845,16 @@ cond_term ()
 	  /* Special case.  [[ x ]] is equivalent to [[ -n x ]], just like
 	     the test command.  Similarly for [[ x && expr ]] or
 	     [[ x || expr ]] or [[ (x) ]]. */
-	  op = make_word ("-n");
-	  term = make_cond_node (COND_UNARY, op, tleft, (COND_COM *)NULL);
+	  op = make_word ("-n"
+#ifdef BASH2PY
+                              , &start_position
+#endif
+                         );
+	  term = make_cond_node (COND_UNARY, op, tleft, (COND_COM *)NULL
+#ifdef BASH2PY
+                              , &start_position
+#endif
+                                );
 	  cond_token = tok;
 	  return (term);
 	}
@@ -4368,11 +4862,11 @@ cond_term ()
 	{
 	  if (etext = error_token_from_token (tok))
 	    {
-	      parser_error (line_number, _("unexpected token `%s', conditional binary operator expected"), etext);
+	      parser_error (LINE_NUMBER, _("unexpected token `%s', conditional binary operator expected"), etext);
 	      free (etext);
 	    }
 	  else
-	    parser_error (line_number, _("conditional binary operator expected"));
+	    parser_error (LINE_NUMBER, _("conditional binary operator expected"));
 	  dispose_cond_node (tleft);
 	  COND_RETURN_ERROR ();
 	}
@@ -4387,18 +4881,26 @@ cond_term ()
 
       if (tok == WORD)
 	{
-	  tright = make_cond_node (COND_TERM, yylval.word, (COND_COM *)NULL, (COND_COM *)NULL);
-	  term = make_cond_node (COND_BINARY, op, tleft, tright);
+	  tright = make_cond_node (COND_TERM, yylval.word, (COND_COM *)NULL, (COND_COM *)NULL
+#ifdef BASH2PY
+             ,&start_position
+#endif
+                                  );
+	  term = make_cond_node (COND_BINARY, op, tleft, tright
+#ifdef BASH2PY
+             ,&start_position
+#endif
+                                );
 	}
       else
 	{
 	  if (etext = error_token_from_token (tok))
 	    {
-	      parser_error (line_number, _("unexpected argument `%s' to conditional binary operator"), etext);
+	      parser_error (LINE_NUMBER, _("unexpected argument `%s' to conditional binary operator"), etext);
 	      free (etext);
 	    }
 	  else
-	    parser_error (line_number, _("unexpected argument to conditional binary operator"));
+	    parser_error (LINE_NUMBER, _("unexpected argument to conditional binary operator"));
 	  dispose_cond_node (tleft);
 	  dispose_word (op);
 	  COND_RETURN_ERROR ();
@@ -4409,14 +4911,14 @@ cond_term ()
   else
     {
       if (tok < 256)
-	parser_error (line_number, _("unexpected token `%c' in conditional command"), tok);
+	parser_error (LINE_NUMBER, _("unexpected token `%c' in conditional command"), tok);
       else if (etext = error_token_from_token (tok))
 	{
-	  parser_error (line_number, _("unexpected token `%s' in conditional command"), etext);
+	  parser_error (LINE_NUMBER, _("unexpected token `%s' in conditional command"), etext);
 	  free (etext);
 	}
       else
-	parser_error (line_number, _("unexpected token %d in conditional command"), tok);
+	parser_error (LINE_NUMBER, _("unexpected token %d in conditional command"), tok);
       COND_RETURN_ERROR ();
     }
   return (term);
@@ -4431,7 +4933,11 @@ parse_cond_command ()
 
   global_extglob = extended_glob;
   cexp = cond_expr ();
-  return (make_cond_command (cexp));
+  return (make_cond_command (cexp
+#ifdef BASH2PY
+                                 , &cexp->position
+#endif
+          ));
 }
 #endif
 
@@ -4503,6 +5009,11 @@ read_token_word (character)
   char *ttok, *ttrans;
   int ttoklen, ttranslen;
   intmax_t lvalue;
+#ifdef BASH2PY
+  POSITION start_position;
+
+  start_position = position;
+#endif
 
   if (token_buffer_size < TOKEN_DEFAULT_INITIAL_SIZE)
     token = (char *)xrealloc (token, token_buffer_size = TOKEN_DEFAULT_INITIAL_SIZE);
@@ -4667,7 +5178,7 @@ read_token_word (character)
 	    {
 	      int first_line;
 
-	      first_line = line_number;
+	      first_line = LINE_NUMBER;
 	      push_delimiter (dstack, peek_char);
 	      ttok = parse_matched_pair (peek_char, peek_char, peek_char,
 					 &ttoklen,
@@ -4835,7 +5346,10 @@ got_token:
       {
 	if (legal_number (token, &lvalue) && (int)lvalue == lvalue)
 	  {
-	    yylval.number = lvalue;
+            VALUE(yylval.number) = lvalue;
+#ifdef BASH2PY
+            yylval.number.position = start_position;
+#endif
 	    return (NUMBER);
 	  }
       }
@@ -4872,6 +5386,9 @@ got_token:
   the_word = (WORD_DESC *)xmalloc (sizeof (WORD_DESC));
   the_word->word = (char *)xmalloc (1 + token_index);
   the_word->flags = 0;
+#ifdef BASH2PY
+  the_word->position = start_position;
+#endif
   strcpy (the_word->word, token);
   if (dollar_present)
     the_word->flags |= W_HASDOLLAR;
@@ -4930,14 +5447,16 @@ got_token:
     {
     case FUNCTION:
       parser_state |= PST_ALLOWOPNBRC;
-      function_dstart = line_number;
+      function_dstart = LINE_NUMBER;
       break;
     case CASE:
     case SELECT:
     case FOR:
+#ifndef BASH2PY
       if (word_top < MAX_CASE_NEST)
 	word_top++;
       word_lineno[word_top] = line_number;
+#endif
       break;
     }
 
@@ -5661,7 +6180,7 @@ error_token_from_token (tok)
 	t = savestring (yylval.word->word);
       break;
     case NUMBER:
-      t = itos (yylval.number);
+      t = itos (VALUE(yylval.number));
       break;
     case ARITH_CMD:
       if (yylval.word_list)
@@ -5732,7 +6251,7 @@ print_offending_line ()
   while (token_end && msg[token_end - 1] == '\n')
     msg[--token_end] = '\0';
 
-  parser_error (line_number, "`%s'", msg);
+  parser_error (LINE_NUMBER, "`%s'", msg);
   free (msg);
 }
 
@@ -5748,7 +6267,7 @@ report_syntax_error (message)
 
   if (message)
     {
-      parser_error (line_number, "%s", message);
+      parser_error (LINE_NUMBER, "%s", message);
       if (interactive && EOF_Reached)
 	EOF_Reached = 0;
       last_command_exit_value = parse_and_execute_level ? EX_BADSYNTAX : EX_BADUSAGE;
@@ -5766,7 +6285,7 @@ report_syntax_error (message)
 	  free (msg);
 	  msg = p;
 	}
-      parser_error (line_number, _("syntax error near unexpected token `%s'"), msg);
+      parser_error (LINE_NUMBER, _("syntax error near unexpected token `%s'"), msg);
       free (msg);
 
       if (interactive == 0)
@@ -5784,7 +6303,7 @@ report_syntax_error (message)
       msg = error_token_from_text ();
       if (msg)
 	{
-	  parser_error (line_number, _("syntax error near `%s'"), msg);
+	  parser_error (LINE_NUMBER, _("syntax error near `%s'"), msg);
 	  free (msg);
 	}
 
@@ -5795,7 +6314,7 @@ report_syntax_error (message)
   else
     {
       msg = EOF_Reached ? _("syntax error: unexpected end of file") : _("syntax error");
-      parser_error (line_number, "%s", msg);
+      parser_error (LINE_NUMBER, "%s", msg);
       /* When the shell is interactive, this file uses EOF_Reached
 	 only for error reporting.  Other mechanisms are used to
 	 decide whether or not to exit. */
@@ -5914,7 +6433,7 @@ parse_string_to_word_list (s, flags, whom)
   bash_history_disable ();
 #endif
 
-  orig_line_number = line_number;
+  orig_line_number = LINE_NUMBER;
   orig_line_count = current_command_line_count;
   orig_input_terminator = shell_input_line_terminator;
   old_echo_input = echo_input_at_read;
@@ -5939,7 +6458,7 @@ parse_string_to_word_list (s, flags, whom)
 	continue;
       if (tok != WORD && tok != ASSIGNMENT_WORD)
 	{
-	  line_number = orig_line_number + line_number - 1;
+	  LINE_NUMBER = orig_line_number + line_number - 1;
 	  orig_current_token = current_token;
 	  current_token = tok;
 	  yyerror (NULL);	/* does the right thing */
@@ -5993,7 +6512,7 @@ parse_compound_assignment (retlenp)
 
   saved_token = token;
   orig_token_size = token_buffer_size;
-  orig_line_number = line_number;
+  orig_line_number = LINE_NUMBER;
   orig_last_token = last_read_token;
 
   last_read_token = WORD;	/* WORD to allow reserved words here */

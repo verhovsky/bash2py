@@ -60,6 +60,9 @@ copy_word (w)
 
   new_word = make_bare_word (w->word);
   new_word->flags = w->flags;
+#ifdef BASH2PY
+  new_word->position = w->position;
+#endif
   return (new_word);
 }
 
